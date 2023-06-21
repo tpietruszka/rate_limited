@@ -14,25 +14,23 @@ class Resource:
         self.name = name
         self.quota = quota
         self.time_window_seconds = time_window_seconds
-        self.used = 0
+        self._used = 0
         self.usage_log = deque()
 
     def __repr__(self):
-        return f"{self.name} - {self.used}/{self.quota} used"
+        return f"{self.name} - {self.get_usage()}/{self.quota} used"
 
     def add_usage(self, amount):
         # TODO: consider adding a time param - for better control over what timestamps are used
-        self.used += amount
+        self._used += amount
         self.usage_log.append(UsageLog(datetime.now(), amount))
 
     def get_usage(self):
-        while (
-            self.usage_log
-            and (datetime.now() - self.usage_log[0].timestamp).seconds
-            > self.time_window_seconds
+        while self.usage_log and (
+            (datetime.now() - self.usage_log[0].timestamp).seconds > self.time_window_seconds
         ):
-            self.used -= self.usage_log.popleft().amount
-        return self.used
+            self._used -= self.usage_log.popleft().amount
+        return self._used
 
     def get_remaining(self):
         return self.quota - self.get_usage()
