@@ -17,21 +17,24 @@ async def handle_request(request):
     n = int(request.match_info.get("how_many"))
     points = n * 2
 
-    quotas_exceeded = []
+    points_resource = request.app["points_resource"]
+    requests_resource = request.app["requests_resource"]
 
-    if not request.app["points_resource"].is_available(points):
-        quotas_exceeded.append("Too many points used")
-    if not request.app["requests_resource"].is_available(1):
-        quotas_exceeded.append("Too many requests")
+    allowed = False
+    state_before_check = str((points_resource, requests_resource))
+    if points_resource.is_available(points) and requests_resource.is_available(1):
+        allowed = True
+        requests_resource.add_usage(1)
+        points_resource.add_usage(points)
 
-    if quotas_exceeded:
+    if not allowed:
         return web.Response(
-            body=json.dumps({"message": "".join(quotas_exceeded)}),
+            body=json.dumps({"message": "Some rate limits exceeded: " + state_before_check}),
             content_type="application/json",
             status=429,
         )
 
-    await asyncio.sleep(n / 100)
+    await asyncio.sleep(n / 10)
 
     data = {
         "output": "x" * n,
@@ -42,11 +45,6 @@ async def handle_request(request):
         body=json.dumps(data),
         content_type="application/json",
     )
-
-    # pessimistic approach - register usage long after the check, upon completion of the work
-    request.app["requests_resource"].add_usage(1)
-    request.app["points_resource"].add_usage(points)
-
     return response
 
 
@@ -57,12 +55,9 @@ def start_app():
             web.get("/calculate_things/{how_many}", handle_request),
         ]
     )
-    app["requests_resource"] = Resource(
-        "requests", REQUESTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS
-    )
-    app["points_resource"] = Resource(
-        "points", POINTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS
-    )
+    app["requests_resource"] = Resource("requests", REQUESTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS)
+    app["points_resource"] = Resource("points", POINTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS)
+    app["resources_lock"] = asyncio.Lock()
 
     web.run_app(app)
 
