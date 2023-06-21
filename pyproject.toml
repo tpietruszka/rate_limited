@@ -1,0 +1,22 @@
+[build-system]
+requires = ["flit_core>=3.4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "rate_limited"
+version = "0.0.1"
+authors = [
+  { name="Tomasz Pietruszka", email="tomek.pietruszka@gmail.com" },
+]
+description = "Use slow, rate-limited APIs - like those of Large Language Models - as efficiently as possible"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/tpietruszka/rate_limited"
+"Bug Tracker" = "https://github.com/tpietruszka/rate_limited/issues"
