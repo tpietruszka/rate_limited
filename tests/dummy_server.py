@@ -48,7 +48,7 @@ async def handle_request(request):
     return response
 
 
-def start_app():
+def start_app(host="localhost", port=8080):
     app = web.Application()
     app.add_routes(
         [
@@ -57,9 +57,8 @@ def start_app():
     )
     app["requests_resource"] = Resource("requests", REQUESTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS)
     app["points_resource"] = Resource("points", POINTS_PER_TIME_WINDOW, TIME_WINDOW_SECONDS)
-    app["resources_lock"] = asyncio.Lock()
 
-    web.run_app(app)
+    web.run_app(app, host=host, port=port)
 
 
 if __name__ == "__main__":
