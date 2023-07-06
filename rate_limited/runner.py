@@ -17,7 +17,8 @@ class Runner:
         self.resources = resources  # TODO: how to pass tracking functions?
         self.max_concurrent = max_concurrent
         self.max_retries = max_retries
-        # TODO: add verification functions? (checking if response meets criteria, retrying otherwise)
+        # TODO: add verification functions?
+        # (checking if response meets criteria, retrying otherwise)
 
         # two views - one in order of scheduling, the other: tasks to execute, incl. retries
         self.scheduled_calls: list[Call] = []
@@ -46,8 +47,9 @@ class Runner:
 
     async def run(self) -> tuple[list, list]:
         """
-        Runs the scheduled calls, returning a tuple of results (in order of scheduling) and exceptions
-        (list of lists, in order of scheduling)
+        Runs the scheduled calls, returning a tuple of:
+        - results (list, in order of scheduling) and
+        - exceptions(list of lists, in order of scheduling)
         """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
         # TODO: handle notifications when resources are available again?
