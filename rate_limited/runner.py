@@ -42,15 +42,13 @@ class Runner:
                     self.execution_queue.put_nowait(call)
             finally:
                 self.execution_queue.task_done()
-
-        # TODO: figure out returning results - if needed
-        # TODO: retrying - with a limit; perhaps we have to go from generator to queue? (which will complicate result handling)
-        # (or perhaps we can do a smarter generator?)
         # TODO: rate limiting
 
-    async def run(self) -> list:
-        # TODO: make sure calls are not scheduled while this is running?
-        # (or support that case)
+    async def run(self) -> tuple[list, list]:
+        """
+        Runs the scheduled calls, returning a tuple of results (in order of scheduling) and exceptions
+        (list of lists, in order of scheduling)
+        """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
         # TODO: handle notifications when resources are available again?
         await self.execution_queue.join()
@@ -58,7 +56,7 @@ class Runner:
             task.cancel()
         await gather(*worker_tasks, return_exceptions=True)
         results = [call.result for call in self.scheduled_calls]
-        # TODO: how do we return/reports errors?
+        exception_lists = [call.exceptions for call in self.scheduled_calls]
         self.scheduled_calls = []
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
-        return results
+        return results, exception_lists
