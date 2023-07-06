@@ -1,11 +1,11 @@
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
 class Call:
     args: tuple
     kwargs: dict
-    num_retries: int
+    num_retries: int = 0
     result: Any = None
-    exception: Optional[Exception] = None
+    exceptions: list[Exception] = field(default_factory=list)
