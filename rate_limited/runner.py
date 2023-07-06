@@ -1,4 +1,6 @@
-from asyncio import Queue, create_task, gather
+from asyncio import Condition, Queue, create_task, gather
+from asyncio import sleep as asyncio_sleep
+from datetime import datetime
 from typing import Callable, Collection
 
 from rate_limited.calls import Call
@@ -12,11 +14,13 @@ class Runner:
         resources: Collection[Resource],
         max_concurrent: int,
         max_retries: int = 0,
+        min_wait_time: float = 1,
     ):
         self.function = function
-        self.resources = resources  # TODO: how to pass tracking functions?
+        self.resource_manager = ResourceManager(resources)
         self.max_concurrent = max_concurrent
         self.max_retries = max_retries
+        self.min_wait_time = min_wait_time
         # TODO: add verification functions?
         # (checking if response meets criteria, retrying otherwise)
 
@@ -32,9 +36,19 @@ class Runner:
 
     async def worker(self):
         while True:
+            # wait to get a task
             call = await self.execution_queue.get()
+            # wait for resources to be available
+            await self.resource_manager.wait_for_resources(call)
+
+            # starting to execute - but first, register the usage
+            self.resource_manager.register_call(call)
             try:
+                # TODO: add a timeout mechanism?
                 call.result = await self.function(*call.args, **call.kwargs)
+                # TODO: are there cases where we need to register result-based usage on error?
+                # (one case: if we have user-defined verification functions)
+                self.resource_manager.register_result(call.result)
             except Exception as e:
                 # TODO: add logging?
                 call.exceptions.append(e)
@@ -43,7 +57,6 @@ class Runner:
                     self.execution_queue.put_nowait(call)
             finally:
                 self.execution_queue.task_done()
-        # TODO: rate limiting
 
     async def run(self) -> tuple[list, list]:
         """
@@ -52,13 +65,71 @@ class Runner:
         - exceptions(list of lists, in order of scheduling)
         """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
+
+        # execution_queue.empty() will be true if all unfinished tasks have been taken by workers
+        # (but some of them might still be waiting for resources)
+        # TODO: consider a different mechanism, without relying on a private attribute
+        # (maybe count the number of finished tasks externally?)
+        while self.execution_queue._unfinished_tasks > 0:  # type: ignore
+            now = datetime.now().timestamp()
+            next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
+            wait_time = max(self.min_wait_time, next_expiration - now)
+            print(f"Queue size: {self.execution_queue.qsize()}, waiting for {wait_time} seconds")
+            await asyncio_sleep(wait_time)
+            async with self.resource_manager.condition:
+                self.resource_manager.wake_workers()
+        print("Queue is empty, waiting for workers to finish")
         # TODO: handle notifications when resources are available again?
         await self.execution_queue.join()
+        print("Workers finished, cancelling remaining tasks")
         for task in worker_tasks:
             task.cancel()
+        print("Waiting for workers to finish")
         await gather(*worker_tasks, return_exceptions=True)
+        print("Workers finished")
         results = [call.result for call in self.scheduled_calls]
         exception_lists = [call.exceptions for call in self.scheduled_calls]
         self.scheduled_calls = []
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
+
+
+class ResourceManager:
+    def __init__(self, resources: Collection[Resource]):
+        self.resources = list(resources)
+        self.condition = Condition()
+
+    def register_call(self, call: Call):
+        for resource in self.resources:
+            if resource.arguments_usage_extractor:
+                resource.add_usage(resource.arguments_usage_extractor(call))
+
+    def register_result(self, result):
+        for resource in self.resources:
+            if resource.results_usage_extractor:
+                resource.add_usage(resource.results_usage_extractor(result))
+
+    def get_next_usage_expiration(self) -> datetime:
+        return min(resource.get_next_expiration() for resource in self.resources)
+
+    def _has_space_for_call(self, call: Call) -> bool:
+        # important - we should NOT have any async code here!
+        # (because we are inside a condition check)
+        for resource in self.resources:
+            if resource.arguments_usage_extractor:
+                needed = resource.arguments_usage_extractor(call)
+            else:
+                needed = 0
+            if not resource.is_available(needed):
+                print(f"resource {resource.name} is not available: {resource}")
+                return False
+        print("all resources are available")
+        return True
+
+    async def wait_for_resources(self, call: Call):
+        async with self.condition:
+            await self.condition.wait_for(lambda: self._has_space_for_call(call))
+
+    def wake_workers(self):
+        # TODO: this is too eager, we could only wake a subset of workers (exact solution non-trivial?)
+        self.condition.notify_all()
