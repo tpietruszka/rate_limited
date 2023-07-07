@@ -12,7 +12,7 @@ from tests.dummy_server import (
 def test_dummy_server_sanity(running_dummy_server):
     """Tests a simple call to the dummy server - verifying the testing setup works"""
     # TODO: make host and port into constants
-    response = requests.get("http://localhost:8080/calculate_things/1")
+    response = requests.get(f"{running_dummy_server}/calculate_things/1")
     assert response.status_code == 200
     assert response.json() == {
         "output": "x",
@@ -23,7 +23,7 @@ def test_dummy_server_sanity(running_dummy_server):
 
 def test_dummy_server_error(running_dummy_server):
     """Verify that the dummy server returns an error when requested"""
-    response = requests.get("http://localhost:8080/calculate_things/1?failure_proba=1")
+    response = requests.get(f"{running_dummy_server}/calculate_things/1?failure_proba=1")
     assert response.status_code == 500
     assert response.json() == {"message": "Internal server error"}
 
@@ -33,7 +33,7 @@ def test_dummy_server_rate_limit_requests(running_dummy_server):
     n = REQUESTS_PER_TIME_WINDOW + 1
     with ThreadPoolExecutor(max_workers=n) as executor:
         futures = [
-            executor.submit(requests.get, f"http://localhost:8080/calculate_things/1")
+            executor.submit(requests.get, f"{running_dummy_server}/calculate_things/1")
             for _ in range(n)
         ]
         results = [future.result() for future in futures]
@@ -51,7 +51,9 @@ def test_dummy_server_rate_limit_points(running_dummy_server):
     n_requests = 2
     with ThreadPoolExecutor(max_workers=n_requests) as executor:
         futures = [
-            executor.submit(requests.get, f"http://localhost:8080/calculate_things/{request_param}")
+            executor.submit(
+                requests.get, f"{running_dummy_server}/calculate_things/{request_param}"
+            )
             for _ in range(n_requests)
         ]
         results = [future.result() for future in futures]
