@@ -38,7 +38,12 @@ async def handle_request(request):
     requests_resource = request.app["requests_resource"]
 
     allowed = False
-    state_before_check = str((points_resource, requests_resource))
+    points_before_check = points_resource.get_usage()
+    requests_before_check = requests_resource.get_usage()
+    state_before_check = {
+        "points": points_before_check,
+        "requests": requests_before_check,
+    }
     if points_resource.is_available(points) and requests_resource.is_available(1):
         allowed = True
         requests_resource.add_usage(1)
@@ -46,7 +51,7 @@ async def handle_request(request):
 
     if not allowed:
         return web.Response(
-            body=json.dumps({"message": "Some rate limits exceeded: " + state_before_check}),
+            body=json.dumps({"message": "Some rate limits exceeded: " + str(state_before_check)}),
             content_type="application/json",
             status=429,
         )
@@ -64,6 +69,7 @@ async def handle_request(request):
     data = {
         "output": "x" * n,
         "used_points": points,
+        "state_before_check": state_before_check,
     }
     response = web.Response(
         status=200,

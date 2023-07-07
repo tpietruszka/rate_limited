@@ -14,7 +14,11 @@ def test_dummy_server_sanity(running_dummy_server):
     # TODO: make host and port into constants
     response = requests.get("http://localhost:8080/calculate_things/1")
     assert response.status_code == 200
-    assert response.json() == {"output": "x", "used_points": 2}
+    assert response.json() == {
+        "output": "x",
+        "used_points": 2,
+        "state_before_check": {"points": 0, "requests": 0},
+    }
 
 
 def test_dummy_server_error(running_dummy_server):
@@ -40,9 +44,9 @@ def test_dummy_server_rate_limit_requests(running_dummy_server):
 def test_dummy_server_rate_limit_points(running_dummy_server):
     """Too many points at once - should be rate limited"""
     points_per_request = POINTS_PER_TIME_WINDOW
-    request_param = points_per_request // points_usage_from_n(
-        1
-    )  # assuming it's a simple multiplier
+
+    # assuming points are a multiple of the request_param
+    request_param = points_per_request // points_usage_from_n(1)
 
     n_requests = 2
     with ThreadPoolExecutor(max_workers=n_requests) as executor:
