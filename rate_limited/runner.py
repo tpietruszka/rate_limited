@@ -1,5 +1,7 @@
+import traceback
 from asyncio import Condition, Queue, create_task, gather
 from asyncio import sleep as asyncio_sleep
+from asyncio import to_thread
 from datetime import datetime
 from typing import Callable, Collection
 
@@ -45,12 +47,14 @@ class Runner:
             self.resource_manager.register_call(call)
             try:
                 # TODO: add a timeout mechanism?
-                call.result = await self.function(*call.args, **call.kwargs)
+                call.result = await to_thread(self.function, *call.args, **call.kwargs)
                 # TODO: are there cases where we need to register result-based usage on error?
                 # (one case: if we have user-defined verification functions)
                 self.resource_manager.register_result(call.result)
             except Exception as e:
                 # TODO: add logging?
+                print(f"Exception: {e}")
+                traceback.print_exception(e)
                 call.exceptions.append(e)
                 if call.num_retries < self.max_retries:
                     call.num_retries += 1
@@ -79,7 +83,6 @@ class Runner:
             async with self.resource_manager.condition:
                 self.resource_manager.wake_workers()
         print("Queue is empty, waiting for workers to finish")
-        # TODO: handle notifications when resources are available again?
         await self.execution_queue.join()
         print("Workers finished, cancelling remaining tasks")
         for task in worker_tasks:
