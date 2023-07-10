@@ -13,16 +13,17 @@ def running_dummy_server():
     Spins up a dummy server, and returns its address.
     Cleans up after the test is done.
     """
+    host = "localhost"
 
     # find a free port
-    with socketserver.TCPServer(("localhost", 0), None) as s:
+    with socketserver.TCPServer((host, 0), socketserver.BaseRequestHandler) as s:
         free_port = s.server_address[1]
 
-    start_app_bound = partial(start_app, host="localhost", port=free_port)
+    start_app_bound = partial(start_app, host=host, port=free_port)
     p = multiprocessing.Process(target=start_app_bound)
     p.start()
     sleep(1)  # give it time to start
 
-    address = f"http://localhost:{free_port}"
+    address = f"http://{host}:{free_port}"
     yield address
     p.terminate()
