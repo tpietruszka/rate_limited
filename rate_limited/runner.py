@@ -1,7 +1,10 @@
+import contextvars
+import functools
 import traceback
-from asyncio import Condition, Queue, create_task, gather
+from asyncio import Condition, Queue, create_task, events, gather
 from asyncio import sleep as asyncio_sleep
 from asyncio import to_thread
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable, Collection
 
@@ -21,6 +24,7 @@ class Runner:
         self.function = function
         self.resource_manager = ResourceManager(resources)
         self.max_concurrent = max_concurrent
+        self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
         self.min_wait_time = min_wait_time
         # TODO: add verification functions?
@@ -61,6 +65,24 @@ class Runner:
                     self.execution_queue.put_nowait(call)
             finally:
                 self.execution_queue.task_done()
+
+    async def to_thread_in_pool(self, func, /, *args, **kwargs):
+        """Copy of asyncio.to_thread, but using a custom thread pool
+        (and not requiring Python 3.9)
+
+        Asynchronously run function *func* in a separate thread.
+
+        Any *args and **kwargs supplied for this function are directly passed
+        to *func*. Also, the current :class:`contextvars.Context` is propagated,
+        allowing context variables from the main thread to be accessed in the
+        separate thread.
+
+        Return a coroutine that can be awaited to get the eventual result of *func*.
+        """
+        loop = events.get_running_loop()
+        ctx = contextvars.copy_context()
+        func_call = functools.partial(ctx.run, func, *args, **kwargs)
+        return await loop.run_in_executor(self.executor, func_call)
 
     async def run(self) -> tuple[list, list]:
         """
