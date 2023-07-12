@@ -30,8 +30,10 @@ class Resource:
             name: name of the resource
             quota: maximum amount of the resource that can be used in the time window
             time_window_seconds: time window in seconds
-            arguments_usage_extractor: function that extracts the amount of resource used from the arguments
-            results_usage_extractor: function that extracts the amount of resource used from the results
+            arguments_usage_extractor: function that extracts the amount of resource used from
+                the arguments
+            results_usage_extractor: function that extracts the amount of resource used from
+                the results
         """
         self.name = name
         self.quota = quota
@@ -41,7 +43,8 @@ class Resource:
 
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
-        # TODO: consider adding an optional estimator: taking arguments, returning max possible usage from results
+        # TODO: consider adding an optional estimator: taking arguments, returning max possible
+        # usage from results
 
     def __repr__(self):
         return f"{self.name} - {self.get_usage()}/{self.quota} used"

@@ -156,5 +156,6 @@ class ResourceManager:
             await self.condition.wait_for(lambda: self._has_space_for_call(call))
 
     def wake_workers(self):
-        # TODO: this is too eager, we could only wake a subset of workers (exact solution non-trivial?)
+        # TODO: this is too eager, we could only wake a subset of workers
+        # (exact solution non-trivial?)
         self.condition.notify_all()
