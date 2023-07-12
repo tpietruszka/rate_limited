@@ -29,8 +29,8 @@ tests = [
 "Homepage" = "https://github.com/tpietruszka/rate_limited"
 "Bug Tracker" = "https://github.com/tpietruszka/rate_limited/issues"
 
-
-
-
 [tool.black]
 line-length = 100
+
+[tool.isort]
+profile = "black"
