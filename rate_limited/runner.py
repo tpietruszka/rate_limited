@@ -99,7 +99,11 @@ class Runner:
         while self.execution_queue._unfinished_tasks > 0:  # type: ignore
             now = datetime.now().timestamp()
             next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
-            wait_time = max(self.min_wait_time, next_expiration - now)
+            wait_time = (
+                max(self.min_wait_time, next_expiration - now)
+                if not self.execution_queue.empty()
+                else self.min_wait_time
+            )
             print(f"Queue size: {self.execution_queue.qsize()}, waiting for {wait_time} seconds")
             await asyncio_sleep(wait_time)
             async with self.resource_manager.condition:
