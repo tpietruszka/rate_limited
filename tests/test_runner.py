@@ -100,7 +100,7 @@ def test_runner_increasing_payloads(running_dummy_server, runner):
 
 def test_runner_unreliable_server(running_dummy_server, runner):
     """
-    Tuned so that at first the requests resource is exhausted, then the points resource.
+    Testing results from an unreliable server - with a 50% chance of failure.
     """
     for i in range(1, 11):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)

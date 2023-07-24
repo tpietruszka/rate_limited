@@ -6,7 +6,8 @@ from asyncio import sleep as asyncio_sleep
 from asyncio import to_thread
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Callable, Collection
+from logging import getLogger
+from typing import Callable, Collection, Optional
 
 from rate_limited.calls import Call
 from rate_limited.resources import Resource
@@ -20,6 +21,7 @@ class Runner:
         max_concurrent: int,
         max_retries: int = 0,
         min_wait_time: float = 1,
+        progress_interval: Optional[float] = 5,
     ):
         self.function = function
         self.resource_manager = ResourceManager(resources)
@@ -27,12 +29,15 @@ class Runner:
         self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
         self.min_wait_time = min_wait_time
+        self.progress_interval = progress_interval
         # TODO: add verification functions?
         # (checking if response meets criteria, retrying otherwise)
 
         # two views - one in order of scheduling, the other: tasks to execute, incl. retries
         self.scheduled_calls: list[Call] = []
         self.execution_queue = Queue()
+
+        self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
 
     def schedule(self, *args, **kwargs):
         # TODO: use docstring from self.function?
@@ -56,11 +61,12 @@ class Runner:
                 # (one case: if we have user-defined verification functions)
                 self.resource_manager.register_result(call.result)
             except Exception as e:
-                # TODO: add logging?
-                print(f"Exception: {e}")
-                traceback.print_exception(e)
+                will_retry = call.num_retries < self.max_retries
+                self.logger.warning(
+                    f"Exception occurred, will retry: {will_retry}\n{traceback.format_exc()}"
+                )
                 call.exceptions.append(e)
-                if call.num_retries < self.max_retries:
+                if will_retry:
                     call.num_retries += 1
                     self.execution_queue.put_nowait(call)
             finally:
@@ -96,6 +102,7 @@ class Runner:
         # (but some of them might still be waiting for resources)
         # TODO: consider a different mechanism, without relying on a private attribute
         # (maybe count the number of finished tasks externally?)
+        last_progress_update = datetime.now().timestamp()
         while self.execution_queue._unfinished_tasks > 0:  # type: ignore
             now = datetime.now().timestamp()
             next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
@@ -104,18 +111,21 @@ class Runner:
                 if not self.execution_queue.empty()
                 else self.min_wait_time
             )
-            print(f"Queue size: {self.execution_queue.qsize()}, waiting for {wait_time} seconds")
+            if self.progress_interval and now - last_progress_update > self.progress_interval:
+                self.logger.info(
+                    f"Queue size: {self.execution_queue.qsize()}, waiting for {wait_time} seconds"
+                )
+                last_progress_update = now
             await asyncio_sleep(wait_time)
             async with self.resource_manager.condition:
                 self.resource_manager.wake_workers()
-        print("Queue is empty, waiting for workers to finish")
+        self.logger.info("Queue is empty, waiting for workers to finish")
         await self.execution_queue.join()
-        print("Workers finished, cancelling remaining tasks")
+        self.logger.debug("Workers finished, cancelling remaining tasks")
         for task in worker_tasks:
             task.cancel()
-        print("Waiting for workers to finish")
         await gather(*worker_tasks, return_exceptions=True)
-        print("Workers finished")
+        self.logger.info("Workers finished")
         results = [call.result for call in self.scheduled_calls]
         exception_lists = [call.exceptions for call in self.scheduled_calls]
         self.scheduled_calls = []
@@ -127,6 +137,7 @@ class ResourceManager:
     def __init__(self, resources: Collection[Resource]):
         self.resources = list(resources)
         self.condition = Condition()
+        self.logger = getLogger("rate_limited.ResourceManager")
 
     def register_call(self, call: Call):
         for resource in self.resources:
@@ -150,9 +161,9 @@ class ResourceManager:
             else:
                 needed = 0
             if not resource.is_available(needed):
-                print(f"resource {resource.name} is not available: {resource}")
+                self.logger.debug(f"resource {resource.name} is not available: {resource}")
                 return False
-        print("all resources are available")
+        self.logger.debug("all resources are available")
         return True
 
     async def wait_for_resources(self, call: Call):
