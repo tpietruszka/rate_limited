@@ -1,7 +1,7 @@
 import contextvars
 import functools
 import traceback
-from asyncio import Condition, Queue, create_task, events, gather
+from asyncio import Condition, create_task, events, gather
 from asyncio import sleep as asyncio_sleep
 from asyncio import to_thread
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +10,7 @@ from logging import getLogger
 from typing import Callable, Collection, Optional
 
 from rate_limited.calls import Call
+from rate_limited.queue import CompletionTrackingQueue
 from rate_limited.resources import Resource
 
 
@@ -35,7 +36,7 @@ class Runner:
 
         # two views - one in order of scheduling, the other: tasks to execute, incl. retries
         self.scheduled_calls: list[Call] = []
-        self.execution_queue = Queue()
+        self.execution_queue = CompletionTrackingQueue()
 
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
 
@@ -98,12 +99,8 @@ class Runner:
         """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
-        # execution_queue.empty() will be true if all unfinished tasks have been taken by workers
-        # (but some of them might still be waiting for resources)
-        # TODO: consider a different mechanism, without relying on a private attribute
-        # (maybe count the number of finished tasks externally?)
         last_progress_update = datetime.now().timestamp()
-        while self.execution_queue._unfinished_tasks > 0:  # type: ignore
+        while not self.execution_queue.all_tasks_done():
             now = datetime.now().timestamp()
             next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
             wait_time = (
