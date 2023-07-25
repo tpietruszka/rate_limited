@@ -4,7 +4,8 @@ from functools import partial
 from time import sleep
 
 import pytest
-from dummy_server import start_app
+
+from .dummy_server import start_app
 
 
 @pytest.fixture()  # function scope - avoid polluting other tests

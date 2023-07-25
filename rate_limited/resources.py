@@ -38,8 +38,8 @@ class Resource:
         self.name = name
         self.quota = quota
         self.time_window_seconds = time_window_seconds
-        self._used = 0
-        self.usage_log = deque()
+        self._used = Unit(0)
+        self.usage_log: deque = deque()
 
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
