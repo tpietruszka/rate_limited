@@ -17,10 +17,19 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 [project.optional-dependencies]
-tests = [
+test = [
   "pytest",
   "aiohttp",
   "requests",
+]
+lint = [
+  "black",
+  "isort",
+  "flake8",
+  "flake8-isort",
+  "mypy",
+  "types-requests",
+  "aiohttp",
 ]
 
 [project.urls]
