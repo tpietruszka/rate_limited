@@ -30,3 +30,26 @@ Check:
 ```shell
 flake8 && black --check . && mypy .
 ```
+
+## TODOs:
+- measure how OpenAI API registers resource usage - decide if we need to pre-allocate tokens
+  and prioritize the estimation feature
+- notifications about errors?
+- real API description for one endpoint - OpenAI chat completions?
+- universal sync/async interface
+- better README - description of functionality
+- usage examples
+- CI - github actions
+- PyPI package
+- more API descriptions - incl. batched ones?
+
+### Nice to have:
+- add an optional "result verification" mechanism, for when the server might return, but 
+  the results might be incorrect (e.g. LM not conforming with the given format) - so we retry
+- handle cancellations from the user (`KeyboardInterrupt`) - cancel pending requests, return
+  results of completed requests
+- (optional) progress bar
+- extractor for estimation of usage; perhaps rename things with "pre-allocation" and "post-"?
+- if/where possible, detect RateLimitExceeded - notify the user, slow down
+- should runner.schedule return futures and enable "streaming" of results?
+- add timeouts? -> maybe not
