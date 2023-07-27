@@ -36,7 +36,6 @@ flake8 && black --check . && mypy .
   and prioritize the estimation feature
 - notifications about errors?
 - real API description for one endpoint - OpenAI chat completions?
-- universal sync/async interface
 - better README - description of functionality
 - usage examples
 - CI - github actions

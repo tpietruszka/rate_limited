@@ -1,3 +1,4 @@
+import asyncio
 import contextvars
 import functools
 import traceback
@@ -91,11 +92,9 @@ class Runner:
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(self.executor, func_call)
 
-    async def run(self) -> tuple[list, list]:
+    async def run_coro(self) -> tuple[list, list]:
         """
-        Runs the scheduled calls, returning a tuple of:
-        - results (list, in order of scheduling) and
-        - exceptions(list of lists, in order of scheduling)
+        Actual implementation of run() - to be used by run() and run_sync()
         """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
@@ -128,6 +127,32 @@ class Runner:
         self.scheduled_calls = []
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
+
+    def run_sync(self):
+        """
+        Execute run_coro() from sync code
+        """
+        return asyncio.run(self.run_coro())
+
+    def run(self):
+        """
+        Runs the scheduled calls, returning a tuple of:
+        - results (list, in order of scheduling) and
+        - exceptions(list of lists, in order of scheduling)
+
+        Can be called from both sync and async code
+        (so that the same code can be used in a script and a notebook - Jupyter runs an event loop)
+        """
+        try:
+            # detect if running in an event loop
+            asyncio.get_running_loop()
+            running_loop = True
+        except RuntimeError:
+            running_loop = False
+        if running_loop:
+            return self.run_coro()
+        else:
+            return self.run_sync()
 
 
 class ResourceManager:
