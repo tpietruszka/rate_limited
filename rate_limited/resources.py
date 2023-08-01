@@ -22,6 +22,7 @@ class Resource:
         time_window_seconds: float,
         arguments_usage_extractor: Optional[Callable[[Call], Unit]] = None,
         results_usage_extractor: Optional[Callable[[Any], Unit]] = None,
+        max_results_usage_estimator: Optional[Callable[[Call], Unit]] = None,
     ):
         """
         Defines a resource
@@ -34,17 +35,19 @@ class Resource:
                 the arguments
             results_usage_extractor: function that extracts the amount of resource used from
                 the results
+            max_results_usage_estimator: function that extracts an upper bound on the amount of
+                resource that might be used when results are returned, based on the arguments
         """
         self.name = name
         self.quota = quota
         self.time_window_seconds = time_window_seconds
         self._used = Unit(0)
         self.usage_log: deque = deque()
+        self._pre_allocated = Unit(0)
 
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
-        # TODO: consider adding an optional estimator: taking arguments, returning max possible
-        # usage from results
+        self.max_results_usage_estimator = max_results_usage_estimator  # TODO: consider renaming
 
     def __repr__(self):
         return f"{self.name} - {self.get_usage()}/{self.quota} used"
@@ -54,9 +57,17 @@ class Resource:
         self._used += amount
         self.usage_log.append(UsageLog(datetime.now(), amount))
 
+    def pre_allocate(self, amount: Unit) -> None:
+        self._pre_allocated += amount
+
+    def remove_pre_allocated(self, amount: Unit) -> None:
+        self._pre_allocated -= amount
+
     def get_usage(self) -> Unit:
         """
         Returns the amount used in the last time_window_seconds. Discards expired usage logs.
+
+        Does NOT include pre-allocated usage.
         """
         while self.usage_log and (
             (datetime.now() - self.usage_log[0].timestamp).seconds > self.time_window_seconds
@@ -65,7 +76,12 @@ class Resource:
         return self._used
 
     def get_remaining(self) -> Unit:
-        return self.quota - self.get_usage()
+        """
+        Returns the amount remaining in the current time window. Discards expired usage logs.
+
+        It does include pre-allocated usage.
+        """
+        return self.quota - self.get_usage() - self._pre_allocated
 
     def is_available(self, amount) -> bool:
         return self.get_remaining() >= amount

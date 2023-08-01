@@ -56,6 +56,7 @@ class Runner:
 
             # starting to execute - but first, register the usage
             self.resource_manager.register_call(call)
+            self.resource_manager.pre_allocate(call)
             try:
                 # TODO: add a timeout mechanism?
                 call.result = await to_thread(self.function, *call.args, **call.kwargs)
@@ -72,6 +73,7 @@ class Runner:
                     call.num_retries += 1
                     self.execution_queue.put_nowait(call)
             finally:
+                self.resource_manager.remove_pre_allocation(call)
                 self.execution_queue.task_done()
 
     async def to_thread_in_pool(self, func, /, *args, **kwargs):
@@ -166,10 +168,25 @@ class ResourceManager:
             if resource.arguments_usage_extractor:
                 resource.add_usage(resource.arguments_usage_extractor(call))
 
+    def pre_allocate(self, call: Call):
+        for resource in self.resources:
+            if resource.max_results_usage_estimator:
+                resource.pre_allocate(resource.max_results_usage_estimator(call))
+
     def register_result(self, result):
         for resource in self.resources:
             if resource.results_usage_extractor:
                 resource.add_usage(resource.results_usage_extractor(result))
+
+    def remove_pre_allocation(self, call: Call):
+        """
+        Right now assuming that pre-allocation is only based on the call,
+        this could change to e.g. be also based on history of results
+        (would need passing the amounts around)
+        """
+        for resource in self.resources:
+            if resource.max_results_usage_estimator:
+                resource.remove_pre_allocated(resource.max_results_usage_estimator(call))
 
     def get_next_usage_expiration(self) -> datetime:
         return min(resource.get_next_expiration() for resource in self.resources)
@@ -178,8 +195,15 @@ class ResourceManager:
         # important - we should NOT have any async code here!
         # (because we are inside a condition check)
         for resource in self.resources:
-            if resource.arguments_usage_extractor:
+            # assuming we either have arguments_usage_extractor or max_results_usage_estimator
+            # if use of a resource can be determined from the arguments, we should fully handle
+            # it here
+            # TODO: ensure on init that combination of extractors is valid
+            assert not resource.arguments_usage_extractor and resource.max_results_usage_estimator
+            if resource.arguments_usage_extractor is not None:
                 needed = resource.arguments_usage_extractor(call)
+            elif resource.max_results_usage_estimator is not None:
+                needed = resource.max_results_usage_estimator(call)
             else:
                 needed = 0
             if not resource.is_available(needed):
