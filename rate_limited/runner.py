@@ -187,7 +187,7 @@ class ResourceManager:
     def pre_allocate(self, call: Call):
         for resource in self.resources:
             if resource.max_results_usage_estimator:
-                resource.pre_allocate(resource.max_results_usage_estimator(call))
+                resource.reserve_amount(resource.max_results_usage_estimator(call))
 
     def register_result(self, result):
         for resource in self.resources:
@@ -202,7 +202,7 @@ class ResourceManager:
         """
         for resource in self.resources:
             if resource.max_results_usage_estimator:
-                resource.remove_pre_allocated(resource.max_results_usage_estimator(call))
+                resource.remove_reserved(resource.max_results_usage_estimator(call))
 
     def get_next_usage_expiration(self) -> datetime:
         return min(resource.get_next_expiration() for resource in self.resources)

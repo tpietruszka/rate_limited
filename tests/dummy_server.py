@@ -38,8 +38,8 @@ async def handle_request(request):
     requests_resource = request.app["requests_resource"]
 
     allowed = False
-    points_before_check = points_resource.get_usage()
-    requests_before_check = requests_resource.get_usage()
+    points_before_check = points_resource.get_amount_used()
+    requests_before_check = requests_resource.get_amount_used()
     state_before_check = {
         "points": points_before_check,
         "requests": requests_before_check,

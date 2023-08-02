@@ -46,7 +46,7 @@ class Resource:
         self.time_window_seconds = time_window_seconds
         self._used = Unit(0)
         self.usage_log: deque = deque()
-        self._pre_allocated = Unit(0)
+        self._reserved = Unit(0)
 
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
@@ -59,24 +59,22 @@ class Resource:
             )
 
     def __repr__(self):
-        return f"{self.name} - {self.get_usage()}/{self.quota} used"
+        return f"{self.name} - {self.get_amount_used()}/{self.quota} used"
 
     def add_usage(self, amount: Unit) -> None:
         # TODO: consider adding a time param - for better control over what timestamps are used
         self._used += amount
         self.usage_log.append(UsageLog(datetime.now(), amount))
 
-    def pre_allocate(self, amount: Unit) -> None:
-        self._pre_allocated += amount
+    def reserve_amount(self, amount: Unit) -> None:
+        self._reserved += amount
 
-    def remove_pre_allocated(self, amount: Unit) -> None:
-        self._pre_allocated -= amount
+    def remove_reserved(self, amount: Unit) -> None:
+        self._reserved -= amount
 
-    def get_usage(self) -> Unit:
+    def get_amount_used(self) -> Unit:
         """
-        Returns the amount used in the last time_window_seconds. Discards expired usage logs.
-
-        Does NOT include pre-allocated usage.
+        Returns the amount used in the last time_window_seconds or reserved.
         """
         while self.usage_log and (
             (datetime.now() - self.usage_log[0].timestamp).seconds > self.time_window_seconds
@@ -84,20 +82,17 @@ class Resource:
             self._used -= self.usage_log.popleft().amount
         return self._used
 
-    def get_remaining(self) -> Unit:
+    def get_amount_remaining(self) -> Unit:
         """
-        Returns the amount remaining in the current time window. Discards expired usage logs.
-
-        It does include pre-allocated usage.
+        Returns the amount remaining in the current time window.
         """
-        return self.quota - self.get_usage() - self._pre_allocated
+        return self.quota - self.get_amount_used() - self._reserved
 
     def is_available(self, amount) -> bool:
         """
-        Returns True if there is enough remaining quota to use the given amount. Discards expired
-        usage logs. Takes into account pre-allocated usage.
+        Returns True if there is enough remaining quota to use the given amount.
         """
-        return self.get_remaining() >= amount
+        return self.get_amount_remaining() >= amount
 
     def get_next_expiration(self) -> datetime:
         """
