@@ -43,7 +43,7 @@ class Runner:
 
     def schedule(self, *args, **kwargs):
         # TODO: use docstring from self.function?
-        call = Call(args, kwargs)
+        call = Call(self.function, args, kwargs)
         if not self.resource_manager.is_call_allowed(call):
             raise ValueError(f"Call {call} exceeds resource quota - will never be executed")
         self.scheduled_calls.append(call)

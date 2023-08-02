@@ -85,7 +85,8 @@ class Resource:
 
     def is_available(self, amount) -> bool:
         """
-        Returns True if there is enough remaining quota to use the given amount.
+        Returns True if there is enough remaining quota to use the given amount. Discards expired
+        usage logs. Takes into account pre-allocated usage.
         """
         return self.get_remaining() >= amount
 

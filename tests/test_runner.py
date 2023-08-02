@@ -1,5 +1,6 @@
 import asyncio
 
+import pytest
 import requests
 from pytest import fixture
 
@@ -13,7 +14,11 @@ def dummy_resources():
     return [
         Resource("requests", 5, time_window_seconds=5, arguments_usage_extractor=lambda _: 1),
         Resource(
-            "points", 10, time_window_seconds=10, results_usage_extractor=lambda x: x["used_points"]
+            name="points",
+            quota=10,
+            time_window_seconds=10,
+            results_usage_extractor=lambda x: x["used_points"],
+            max_results_usage_estimator=lambda call: 2 * call.get_argument("how_many"),
         ),
     ]
 
@@ -109,3 +114,8 @@ def test_runner_unreliable_server(running_dummy_server, runner):
     assert outputs == ["x" * i for i in range(1, 11)]
 
     assert exceptions != [[]] * 10
+
+
+def test_refuse_too_large_task(runner, running_dummy_server):
+    with pytest.raises(ValueError, match="exceeds resource quota "):
+        runner.schedule(running_dummy_server, 1000)
