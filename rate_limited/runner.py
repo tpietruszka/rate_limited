@@ -199,7 +199,7 @@ class ResourceManager:
             # if use of a resource can be determined from the arguments, we should fully handle
             # it here
             # TODO: ensure on init that combination of extractors is valid
-            assert not resource.arguments_usage_extractor and resource.max_results_usage_estimator
+            assert not (resource.arguments_usage_extractor and resource.max_results_usage_estimator)
             if resource.arguments_usage_extractor is not None:
                 needed = resource.arguments_usage_extractor(call)
             elif resource.max_results_usage_estimator is not None:
