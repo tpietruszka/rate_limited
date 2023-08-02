@@ -84,6 +84,9 @@ class Resource:
         return self.quota - self.get_usage() - self._pre_allocated
 
     def is_available(self, amount) -> bool:
+        """
+        Returns True if there is enough remaining quota to use the given amount.
+        """
         return self.get_remaining() >= amount
 
     def get_next_expiration(self) -> datetime:

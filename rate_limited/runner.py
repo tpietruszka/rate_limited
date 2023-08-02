@@ -12,7 +12,7 @@ from typing import Callable, Collection, Optional
 
 from rate_limited.calls import Call
 from rate_limited.queue import CompletionTrackingQueue
-from rate_limited.resources import Resource
+from rate_limited.resources import Resource, Unit
 
 
 class Runner:
@@ -43,7 +43,9 @@ class Runner:
 
     def schedule(self, *args, **kwargs):
         # TODO: use docstring from self.function?
-        call = Call(args, kwargs, 0)
+        call = Call(args, kwargs)
+        if not self.resource_manager.is_call_allowed(call):
+            raise ValueError(f"Call {call} exceeds resource quota - will never be executed")
         self.scheduled_calls.append(call)
         self.execution_queue.put_nowait(call)
 
@@ -163,6 +165,20 @@ class ResourceManager:
         self.condition = Condition()
         self.logger = getLogger("rate_limited.ResourceManager")
 
+    def is_call_allowed(self, call: Call) -> bool:
+        """
+        Checks if the resources needed are below the quota - otherwise it will never be allowed
+        """
+        for resource in self.resources:
+            needed = Unit(0)
+            if resource.arguments_usage_extractor:
+                needed = resource.arguments_usage_extractor(call)
+            elif resource.max_results_usage_estimator:
+                needed = resource.max_results_usage_estimator(call)
+            if needed > resource.quota:
+                return False
+        return True
+
     def register_call(self, call: Call):
         for resource in self.resources:
             if resource.arguments_usage_extractor:
@@ -182,7 +198,7 @@ class ResourceManager:
         """
         Right now assuming that pre-allocation is only based on the call,
         this could change to e.g. be also based on history of results
-        (would need passing the amounts around)
+        (would need passing the amounts around somehow)
         """
         for resource in self.resources:
             if resource.max_results_usage_estimator:
