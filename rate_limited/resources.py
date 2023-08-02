@@ -37,6 +37,9 @@ class Resource:
                 the results
             max_results_usage_estimator: function that extracts an upper bound on the amount of
                 resource that might be used when results are returned, based on the arguments
+                (this is used to pre-allocate usage, pre-allocation is then replaced with the
+                actual usage when the results are returned). Only used in combination with
+                results_usage_extractor.
         """
         self.name = name
         self.quota = quota
@@ -48,6 +51,12 @@ class Resource:
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
         self.max_results_usage_estimator = max_results_usage_estimator  # TODO: consider renaming
+
+        if self.max_results_usage_estimator and not self.results_usage_extractor:
+            raise ValueError(
+                "max_results_usage_estimator can only be used when results_usage_extractor is "
+                "also provided"
+            )
 
     def __repr__(self):
         return f"{self.name} - {self.get_usage()}/{self.quota} used"

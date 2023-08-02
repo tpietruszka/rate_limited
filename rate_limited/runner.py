@@ -171,10 +171,10 @@ class ResourceManager:
         """
         for resource in self.resources:
             needed = Unit(0)
-            if resource.arguments_usage_extractor:
-                needed = resource.arguments_usage_extractor(call)
-            elif resource.max_results_usage_estimator:
-                needed = resource.max_results_usage_estimator(call)
+            if resource.arguments_usage_extractor is not None:
+                needed += resource.arguments_usage_extractor(call)
+            if resource.max_results_usage_estimator is not None:
+                needed += resource.max_results_usage_estimator(call)
             if needed > resource.quota:
                 return False
         return True
@@ -211,17 +211,11 @@ class ResourceManager:
         # important - we should NOT have any async code here!
         # (because we are inside a condition check)
         for resource in self.resources:
-            # assuming we either have arguments_usage_extractor or max_results_usage_estimator
-            # if use of a resource can be determined from the arguments, we should fully handle
-            # it here
-            # TODO: ensure on init that combination of extractors is valid
-            assert not (resource.arguments_usage_extractor and resource.max_results_usage_estimator)
+            needed = Unit(0)
             if resource.arguments_usage_extractor is not None:
-                needed = resource.arguments_usage_extractor(call)
-            elif resource.max_results_usage_estimator is not None:
-                needed = resource.max_results_usage_estimator(call)
-            else:
-                needed = 0
+                needed += resource.arguments_usage_extractor(call)
+            if resource.max_results_usage_estimator is not None:
+                needed += resource.max_results_usage_estimator(call)
             if not resource.is_available(needed):
                 self.logger.debug(f"resource {resource.name} is not available: {resource}")
                 return False
