@@ -12,11 +12,11 @@ from rate_limited.runner import Runner
 @fixture
 def dummy_resources():
     return [
-        Resource("requests", 5, time_window_seconds=5, arguments_usage_extractor=lambda _: 1),
+        Resource("requests", 3, time_window_seconds=5, arguments_usage_extractor=lambda _: 1),
         Resource(
             name="points",
-            quota=10,
-            time_window_seconds=10,
+            quota=20,
+            time_window_seconds=5,
             results_usage_extractor=lambda x: x["used_points"],
             max_results_usage_estimator=lambda call: 2 * call.get_argument("how_many"),
         ),
@@ -58,6 +58,7 @@ def test_runner_simple(running_dummy_server, runner):
     outputs = [result["output"] for result in results]
     assert outputs == ["x", "xx", "xxx"]
 
+    # assumption here: resource use here is <= than the quota (all get executed immediately)
     points_used = [
         result["used_points"] + result["state_before_check"]["points"] for result in results
     ]
@@ -92,26 +93,26 @@ def test_runner_increasing_payloads(running_dummy_server, runner):
     """
     Tuned so that at first the requests resource is exhausted, then the points resource.
     """
-    for i in range(1, 11):
+    for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
     results, exceptions = runner.run()
 
     outputs = [result["output"] for result in results]
-    assert outputs == ["x" * i for i in range(1, 11)]
+    assert outputs == ["x" * i for i in range(1, 8)]
 
 
 def test_runner_unreliable_server(running_dummy_server, runner):
     """
     Testing results from an unreliable server - with a 50% chance of failure.
     """
-    for i in range(1, 11):
+    for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
 
     results, exceptions = runner.run()
 
     outputs = [result["output"] for result in results]
-    assert outputs == ["x" * i for i in range(1, 11)]
+    assert outputs == ["x" * i for i in range(1, 8)]
 
     assert exceptions != [[]] * 10
 
