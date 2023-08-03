@@ -2,15 +2,23 @@ import asyncio
 
 import pytest
 import requests
-from pytest import fixture
 
 from rate_limited.resources import Resource
 from rate_limited.runner import Runner
 
 
-# TODO: move?
-@fixture
-def dummy_resources():
+def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
+    """Calls the dummy API"""
+    result = requests.get(f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}")
+    # this imitates the behavior of an API client, raising e.g. on a timeout error (or some
+    # other kind of error)
+    result.raise_for_status()
+    parsed = result.json()
+    return parsed
+
+
+def dummy_resources(with_estimation: bool = True) -> list[Resource]:
+    estimator = (lambda call: 2 * call.get_argument("how_many")) if with_estimation else None
     return [
         Resource("requests", 3, time_window_seconds=5, arguments_usage_extractor=lambda _: 1),
         Resource(
@@ -18,37 +26,23 @@ def dummy_resources():
             quota=20,
             time_window_seconds=5,
             results_usage_extractor=lambda x: x["used_points"],
-            max_results_usage_estimator=lambda call: 2 * call.get_argument("how_many"),
+            max_results_usage_estimator=estimator,
         ),
     ]
 
 
-def call_dummy_api(url, how_many, failure_proba=0):
-    """Calls the dummy API"""
-    result = requests.get(f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}")
-    # this imitates the behavior of an API client, raising e.g. on a timeout error (or some
-    # other kind of error)
-    result.raise_for_status()
-
-    parsed = result.json()
-    return parsed
-
-
-# TODO: add an async API, run tests with both via "parametrized"
-
-
-@fixture
-def runner(dummy_resources):
+def get_runner(resources: list[Resource]) -> Runner:
     """Runner instantiated to call the dummy API"""
     return Runner(
-        call_dummy_api,
-        resources=dummy_resources,
+        dummy_client,
+        resources=resources,
         max_concurrent=10,
         max_retries=5,
     )
 
 
-def test_runner_simple(running_dummy_server, runner):
+def test_runner_simple(running_dummy_server):
+    runner = get_runner(dummy_resources())
     runner.schedule(running_dummy_server, 1)
     runner.schedule(running_dummy_server, 2)
     runner.schedule(running_dummy_server, 3)
@@ -67,10 +61,11 @@ def test_runner_simple(running_dummy_server, runner):
     assert exceptions == [[]] * 3
 
 
-def test_runner_simple_from_coroutine(running_dummy_server, runner):
+def test_runner_simple_from_coroutine(running_dummy_server):
     async def coro():
         # the content of coro() reflects how the the runner would be used in Jupyter,
         # (where everything happens within a coroutine)
+        runner = get_runner(dummy_resources())
         runner.schedule(running_dummy_server, 1)
         runner.schedule(running_dummy_server, 2)
         runner.schedule(running_dummy_server, 3)
@@ -89,10 +84,11 @@ def test_runner_simple_from_coroutine(running_dummy_server, runner):
     asyncio.run(coro())
 
 
-def test_runner_increasing_payloads(running_dummy_server, runner):
+def test_runner_increasing_payloads(running_dummy_server):
     """
     Tuned so that at first the requests resource is exhausted, then the points resource.
     """
+    runner = get_runner(dummy_resources())
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
@@ -102,10 +98,12 @@ def test_runner_increasing_payloads(running_dummy_server, runner):
     assert outputs == ["x" * i for i in range(1, 8)]
 
 
-def test_runner_unreliable_server(running_dummy_server, runner):
+def test_runner_unreliable_server(running_dummy_server):
     """
     Testing results from an unreliable server - with a 50% chance of failure.
     """
+    runner = get_runner(dummy_resources())
+
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
 
@@ -117,6 +115,7 @@ def test_runner_unreliable_server(running_dummy_server, runner):
     assert exceptions != [[]] * 10
 
 
-def test_refuse_too_large_task(runner, running_dummy_server):
+def test_refuse_too_large_task(running_dummy_server):
+    runner = get_runner(dummy_resources())
     with pytest.raises(ValueError, match="exceeds resource quota "):
         runner.schedule(running_dummy_server, 1000)
