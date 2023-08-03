@@ -132,7 +132,7 @@ class Runner:
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
-    def run_sync(self):
+    def run_sync(self) -> tuple[list, list]:
         """
         Execute run_coro() from sync code
         """
@@ -146,6 +146,8 @@ class Runner:
 
         Can be called from both sync and async code
         (so that the same code can be used in a script and a notebook - Jupyter runs an event loop)
+
+        NB: if called from async code, returns an awaitable; otherwise, returns a tuple
         """
         try:
             # detect if running in an event loop

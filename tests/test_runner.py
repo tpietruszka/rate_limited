@@ -51,7 +51,9 @@ def test_runner_simple(running_dummy_server):
     runner.schedule(running_dummy_server, 2)
     runner.schedule(running_dummy_server, 3)
 
-    results, exceptions = runner.run()
+    # ignoring type - here run() will auto-detect that it is NOT running in an event loop
+    # and return a simple tuple
+    results, exceptions = runner.run()  # type: ignore
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x", "xx", "xxx"]
@@ -74,7 +76,9 @@ def test_runner_simple_from_coroutine(running_dummy_server):
         runner.schedule(running_dummy_server, 2)
         runner.schedule(running_dummy_server, 3)
 
-        results, exceptions = await runner.run()
+        # ignoring type - here run() will auto-detect that it's running in an event loop
+        # and return an awaitable
+        results, exceptions = await runner.run()  # type: ignore
         outputs = [result["output"] for result in results]
         assert outputs == ["x", "xx", "xxx"]
 
@@ -96,7 +100,7 @@ def test_runner_increasing_payloads(running_dummy_server):
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
-    results, exceptions = runner.run()
+    results, exceptions = runner.run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x" * i for i in range(1, 8)]
@@ -111,7 +115,7 @@ def test_runner_unreliable_server(running_dummy_server):
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
 
-    results, exceptions = runner.run()
+    results, exceptions = runner.run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x" * i for i in range(1, 8)]
@@ -145,7 +149,7 @@ def test_runner_without_estimation(running_dummy_server):
     for _ in range(num_requests):
         runner.schedule(running_dummy_server, 1)
 
-    results, exceptions = runner.run()
+    results, exceptions = runner.run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x"] * num_requests
@@ -175,7 +179,7 @@ def test_runner_with_estimation(running_dummy_server):
     for _ in range(num_requests):
         runner.schedule(running_dummy_server, 1)
 
-    results, exceptions = runner.run()
+    results, exceptions = runner.run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x"] * num_requests
