@@ -52,9 +52,7 @@ def test_runner_simple(running_dummy_server):
     runner.schedule(running_dummy_server, 2)
     runner.schedule(running_dummy_server, 3)
 
-    # ignoring type - here run() will auto-detect that it is NOT running in an event loop
-    # and return a simple tuple
-    results, exceptions = runner.run()  # type: ignore
+    results, exceptions = runner.run()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x", "xx", "xxx"]
@@ -77,9 +75,7 @@ def test_runner_simple_from_coroutine(running_dummy_server):
         runner.schedule(running_dummy_server, 2)
         runner.schedule(running_dummy_server, 3)
 
-        # ignoring type - here run() will auto-detect that it's running in an event loop
-        # and return an awaitable
-        results, exceptions = await runner.run()  # type: ignore
+        results, exceptions = runner.run()
         outputs = [result["output"] for result in results]
         assert outputs == ["x", "xx", "xxx"]
 
