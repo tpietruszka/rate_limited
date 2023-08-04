@@ -23,4 +23,4 @@ class Call:
         Returns the value of the argument with the given name - whether it was passed positionally
         or as a keyword argument.
         """
-        return self.all_arguments_dict[name]
+        return self.all_arguments_dict.get(name)
