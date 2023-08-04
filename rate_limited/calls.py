@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from functools import cached_property
 from inspect import signature
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 
 @dataclass
@@ -11,7 +11,7 @@ class Call:
     kwargs: dict
     num_retries: int = 0
     result: Any = None
-    exceptions: list[Exception] = field(default_factory=list)
+    exceptions: List[Exception] = field(default_factory=list)
 
     @cached_property
     def all_arguments_dict(self) -> dict:

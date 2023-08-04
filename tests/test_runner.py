@@ -1,4 +1,5 @@
 import asyncio
+from typing import List
 
 import pytest
 import requests
@@ -19,7 +20,7 @@ def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
 
 def dummy_resources(
     num_requests: int = 3, num_points: int = 20, with_estimation: bool = True
-) -> list[Resource]:
+) -> List[Resource]:
     estimator = (lambda call: 2 * call.get_argument("how_many")) if with_estimation else None
     return [
         Resource(
@@ -35,7 +36,7 @@ def dummy_resources(
     ]
 
 
-def get_runner(resources: list[Resource]) -> Runner:
+def get_runner(resources: List[Resource]) -> Runner:
     """Runner instantiated to call the dummy API"""
     return Runner(
         dummy_client,

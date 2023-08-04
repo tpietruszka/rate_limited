@@ -7,7 +7,7 @@ from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging import getLogger
-from typing import Callable, Collection, Optional
+from typing import Callable, Collection, List, Optional, Tuple
 
 from rate_limited.calls import Call
 from rate_limited.queue import CompletionTrackingQueue
@@ -35,7 +35,7 @@ class Runner:
         # (checking if response meets criteria, retrying otherwise)
 
         # two views - one in order of scheduling, the other: tasks to execute, incl. retries
-        self.scheduled_calls: list[Call] = []
+        self.scheduled_calls: List[Call] = []
         self.execution_queue = CompletionTrackingQueue()
 
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
@@ -95,7 +95,7 @@ class Runner:
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(self.executor, func_call)
 
-    async def run_coro(self) -> tuple[list, list]:
+    async def run_coro(self) -> Tuple[list, list]:
         """
         Actual implementation of run() - to be used by run() and run_sync()
         """
@@ -131,7 +131,7 @@ class Runner:
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
-    def run_sync(self) -> tuple[list, list]:
+    def run_sync(self) -> Tuple[list, list]:
         """
         Execute run_coro() from sync code
         """
