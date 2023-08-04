@@ -4,7 +4,6 @@ import functools
 import traceback
 from asyncio import Condition, create_task, events, gather
 from asyncio import sleep as asyncio_sleep
-from asyncio import to_thread
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging import getLogger
@@ -61,7 +60,7 @@ class Runner:
             self.resource_manager.pre_allocate(call)
             try:
                 # TODO: add a timeout mechanism?
-                call.result = await to_thread(self.function, *call.args, **call.kwargs)
+                call.result = await self.to_thread_in_pool(self.function, *call.args, **call.kwargs)
                 # TODO: are there cases where we need to register result-based usage on error?
                 # (one case: if we have user-defined verification functions)
                 self.resource_manager.register_result(call.result)
