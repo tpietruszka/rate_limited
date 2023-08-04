@@ -10,6 +10,7 @@ from logging import getLogger
 from typing import Callable, Collection, List, Optional, Tuple
 
 from rate_limited.calls import Call
+from rate_limited.progress_bar import ProgressBar
 from rate_limited.queue import CompletionTrackingQueue
 from rate_limited.resources import Resource, Unit
 
@@ -102,6 +103,7 @@ class Runner:
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
         last_progress_update = datetime.now().timestamp()
+        pbar = ProgressBar(total=len(self.scheduled_calls))
         while not self.execution_queue.all_tasks_done():
             now = datetime.now().timestamp()
             next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
@@ -110,14 +112,21 @@ class Runner:
                 if not self.execution_queue.empty()
                 else self.min_wait_time
             )
+
+            num_completed = self.execution_queue.tasks_done_count
+            pbar.set_state(num_completed, num_total=self.execution_queue.all_tasks_count)
+
             if self.progress_interval and now - last_progress_update > self.progress_interval:
                 self.logger.info(
-                    f"Queue size: {self.execution_queue.qsize()}, waiting for {wait_time} seconds"
+                    f"Queue size: {self.execution_queue.qsize()}, completed: {num_completed},"
+                    f" waiting for {wait_time} seconds"
                 )
                 last_progress_update = now
             await asyncio_sleep(wait_time)
             async with self.resource_manager.condition:
                 self.resource_manager.wake_workers()
+        pbar.set_state(self.execution_queue.tasks_done_count)
+        pbar.close()
         self.logger.info("Queue is empty, waiting for workers to finish")
         await self.execution_queue.join()
         self.logger.debug("Workers finished, cancelling remaining tasks")
