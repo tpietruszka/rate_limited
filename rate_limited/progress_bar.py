@@ -20,6 +20,7 @@ class ProgressBar:
                 self.pbar.total = num_total
                 if old_total != num_total:
                     self.pbar.refresh()
+        # TODO: optional text-based logging, perhaps at DEBUG level
 
     def close(self):
         if self.pbar:

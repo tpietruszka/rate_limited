@@ -7,7 +7,7 @@ from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging import getLogger
-from typing import Callable, Collection, List, Optional, Tuple
+from typing import Callable, Collection, List, Tuple
 
 from rate_limited.calls import Call
 from rate_limited.progress_bar import ProgressBar
@@ -22,15 +22,13 @@ class Runner:
         resources: Collection[Resource],
         max_concurrent: int,
         max_retries: int = 0,
-        min_wait_time: float = 1,
-        progress_interval: Optional[float] = 5,
+        progress_interval: float = 1.0,
     ):
         self.function = function
         self.resource_manager = ResourceManager(resources)
         self.max_concurrent = max_concurrent
         self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
-        self.min_wait_time = min_wait_time
         self.progress_interval = progress_interval
         # TODO: add verification functions?
         # (checking if response meets criteria, retrying otherwise)
@@ -102,27 +100,12 @@ class Runner:
         """
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
-        last_progress_update = datetime.now().timestamp()
         pbar = ProgressBar(total=len(self.scheduled_calls))
         while not self.execution_queue.all_tasks_done():
-            now = datetime.now().timestamp()
-            next_expiration = self.resource_manager.get_next_usage_expiration().timestamp()
-            wait_time = (
-                max(self.min_wait_time, next_expiration - now)
-                if not self.execution_queue.empty()
-                else self.min_wait_time
-            )
-
             num_completed = self.execution_queue.tasks_done_count
             pbar.set_state(num_completed, num_total=self.execution_queue.all_tasks_count)
-
-            if self.progress_interval and now - last_progress_update > self.progress_interval:
-                self.logger.info(
-                    f"Queue size: {self.execution_queue.qsize()}, completed: {num_completed},"
-                    f" waiting for {wait_time} seconds"
-                )
-                last_progress_update = now
-            await asyncio_sleep(wait_time)
+            # TODO: use a condition/signal instead? (triggered by workers when a result is ready)
+            await asyncio_sleep(self.progress_interval)
             async with self.resource_manager.condition:
                 self.resource_manager.wake_workers()
         pbar.set_state(self.execution_queue.tasks_done_count)
