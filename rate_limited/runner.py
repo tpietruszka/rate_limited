@@ -7,7 +7,7 @@ from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging import getLogger
-from typing import Callable, Collection, List, Tuple
+from typing import Callable, Collection, List, Optional, Tuple
 
 from rate_limited.calls import Call
 from rate_limited.progress_bar import ProgressBar
@@ -35,7 +35,9 @@ class Runner:
 
         # two views - one in order of scheduling, the other: tasks to execute, incl. retries
         self.scheduled_calls: List[Call] = []
-        self.execution_queue = CompletionTrackingQueue()
+        # execution queue is created in initialize_in_event_loop() - once we are sure we are in an
+        # event loop
+        self.execution_queue: Optional[CompletionTrackingQueue] = None
 
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
 
@@ -45,9 +47,11 @@ class Runner:
         if not self.resource_manager.is_call_allowed(call):
             raise ValueError(f"Call {call} exceeds resource quota - will never be executed")
         self.scheduled_calls.append(call)
-        self.execution_queue.put_nowait(call)
+        if self.execution_queue is not None:
+            self.execution_queue.put_nowait(call)
 
     async def worker(self):
+        assert self.execution_queue is not None
         while True:
             # wait to get a task
             call = await self.execution_queue.get()
@@ -94,10 +98,26 @@ class Runner:
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(self.executor, func_call)
 
+    def initialize_in_event_loop(self):
+        """
+        Needs to be called once we are in an event loop. Idempotent - should not cause problems
+        if called multiple times (from multiple run_coro() calls)
+        """
+        # NB: not needed for newer Python version (>=3.10)
+        self.resource_manager.initialize_in_event_loop()
+        if self.execution_queue is None:
+            self.execution_queue = CompletionTrackingQueue()
+            for call in self.scheduled_calls:
+                self.execution_queue.put_nowait(call)
+
     async def run_coro(self) -> Tuple[list, list]:
         """
         Actual implementation of run() - to be used by run() and run_sync()
         """
+        self.initialize_in_event_loop()
+        assert self.resource_manager.condition is not None  # for mypy's benefit
+        assert self.execution_queue is not None
+
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
         pbar = ProgressBar(total=len(self.scheduled_calls))
@@ -157,8 +177,13 @@ class Runner:
 class ResourceManager:
     def __init__(self, resources: Collection[Resource]):
         self.resources = list(resources)
-        self.condition = Condition()
+        self.condition: Optional[Condition] = None
         self.logger = getLogger("rate_limited.ResourceManager")
+
+    def initialize_in_event_loop(self):
+        """Should only be called once we are in an event loop"""
+        if self.condition is None:
+            self.condition = Condition()
 
     def is_call_allowed(self, call: Call) -> bool:
         """
@@ -218,10 +243,12 @@ class ResourceManager:
         return True
 
     async def wait_for_resources(self, call: Call):
+        assert self.condition is not None
         async with self.condition:
             await self.condition.wait_for(lambda: self._has_space_for_call(call))
 
     def wake_workers(self):
+        assert self.condition is not None
         # TODO: this is too eager, we could only wake a subset of workers
         # (exact solution non-trivial?)
         self.condition.notify_all()
