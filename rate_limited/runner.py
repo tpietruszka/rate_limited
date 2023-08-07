@@ -143,7 +143,7 @@ class Runner:
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
-    def run_sync(self) -> Tuple[list, list]:
+    def _run_sync(self) -> Tuple[list, list]:
         """
         Execute run_coro() from sync code - starting a new event loop
         """
@@ -158,20 +158,9 @@ class Runner:
         Can be called from both sync and async code
         (so that the same code can be used in a script and a notebook - Jupyter runs an event loop)
         """
-        try:
-            # detect if running in an event loop
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop is not None:
-            # `await self.run_coro()` is not allowed here, as we are not in a coroutine.
-            # Bending over backwards to have the exact same entrypoint for sync and async code:
-            # starting a new thread with a new event loop and waiting for it to finish
-            with ThreadPoolExecutor(1) as pool:
-                future = pool.submit(self.run_sync)
-                return future.result()
-        else:
-            return self.run_sync()
+        with ThreadPoolExecutor(1) as pool:
+            future = pool.submit(self._run_sync)
+            return future.result()
 
 
 class ResourceManager:

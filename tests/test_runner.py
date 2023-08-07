@@ -97,7 +97,7 @@ def test_runner_increasing_payloads(running_dummy_server):
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
-    results, exceptions = runner.run_sync()
+    results, exceptions = runner._run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x" * i for i in range(1, 8)]
@@ -112,7 +112,7 @@ def test_runner_unreliable_server(running_dummy_server):
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
 
-    results, exceptions = runner.run_sync()
+    results, exceptions = runner._run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x" * i for i in range(1, 8)]
@@ -146,7 +146,7 @@ def test_runner_without_estimation(running_dummy_server):
     for _ in range(num_requests):
         runner.schedule(running_dummy_server, 1)
 
-    results, exceptions = runner.run_sync()
+    results, exceptions = runner._run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x"] * num_requests
@@ -176,7 +176,7 @@ def test_runner_with_estimation(running_dummy_server):
     for _ in range(num_requests):
         runner.schedule(running_dummy_server, 1)
 
-    results, exceptions = runner.run_sync()
+    results, exceptions = runner._run_sync()
 
     outputs = [result["output"] for result in results]
     assert outputs == ["x"] * num_requests
