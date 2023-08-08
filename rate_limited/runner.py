@@ -26,6 +26,7 @@ class Runner:
     ):
         self.function = function
         self.resource_manager = ResourceManager(resources)
+        self._resources = resources
         self.max_concurrent = max_concurrent
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
@@ -98,7 +99,12 @@ class Runner:
         loop = events.get_running_loop()
         ctx = contextvars.copy_context()
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
-        return await loop.run_in_executor(self.requests_executor_pool, func_call)
+        future = loop.run_in_executor(self.requests_executor_pool, func_call)
+        try:
+            return await future
+        except asyncio.CancelledError:
+            future.cancel()
+            raise
 
     def initialize_in_event_loop(self):
         """
@@ -112,12 +118,25 @@ class Runner:
             for call in self.scheduled_calls:
                 self.execution_queue.put_nowait(call)
 
+    def re_initialize(self):
+        """
+        Re-initialize the runner after an interruption
+        """
+        self.resource_manager = ResourceManager(self._resources)
+        self.resource_manager.initialize_in_event_loop()
+        self.execution_queue = CompletionTrackingQueue()
+        for call in self.scheduled_calls:
+            if call.result is None:
+                self.execution_queue.put_nowait(call)
+        # self.resource_manager.condition._lock = asyncio.Lock()  # TODO: find a better way
+        self.interrupted = False
+
     async def run_coro(self) -> Tuple[list, list]:
         """
         Actual implementation of run() - to be used by run() and run_sync()
         """
         if self.interrupted:
-            raise NotImplementedError("Cannot run_coro() after interruption - not (yet) supported")
+            self.re_initialize()
 
         self.initialize_in_event_loop()
         assert self.resource_manager.condition is not None  # for mypy's benefit
@@ -130,8 +149,8 @@ class Runner:
             num_completed = self.execution_queue.tasks_done_count
             self.logger.debug(f"Tasks done: {num_completed} interrupted: {self.interrupted}")
             pbar.set_state(num_completed, num_total=self.execution_queue.all_tasks_count)
-            # TODO: use a condition/signal instead? (triggered by workers when a result is ready)
-            # NB: KeyboardInterrupt handling will wait for this wait too - should not be too long
+            # TODO: use a condition/signal instead? though OS support varies
+            # NB: KeyboardInterrupt handling will wait for this sleep too - should not be too long
             await asyncio_sleep(self.progress_interval)
             if not self.interrupted:
                 async with self.resource_manager.condition:
@@ -172,9 +191,9 @@ class Runner:
             except KeyboardInterrupt:
                 self.logger.warning("Interrupted, collecting already returned results")
                 self.interrupted = True
-                self.requests_executor_pool.shutdown(
-                    wait=False
-                )  # immediately drop requests in progress
+                # self.requests_executor_pool.shutdown(
+                #     wait=False
+                # )  # immediately drop requests in progress
                 return future.result()
 
 
