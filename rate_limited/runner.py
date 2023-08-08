@@ -26,7 +26,6 @@ class Runner:
     ):
         self.function = function
         self.resource_manager = ResourceManager(resources)
-        self._resources = resources
         self.max_concurrent = max_concurrent
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
@@ -34,13 +33,13 @@ class Runner:
         # TODO: add verification functions?
         # (checking if response meets criteria, retrying otherwise)
 
-        # two views - one in order of scheduling, the other: tasks to execute, incl. retries
-        self.scheduled_calls: List[Call] = []
-        # execution queue is created in initialize_in_event_loop() - once we are sure we are in an
-        # event loop
-        self.execution_queue: Optional[CompletionTrackingQueue] = None
-
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
+
+        # list of all calls that have been scheduled, in order of scheduling
+        self.scheduled_calls: List[Call] = []
+        # queue of calls to be executed in the current run()/run_coro() call, including retries
+        # (needs to be initialized in the context of the event loop we will execute in)
+        self.execution_queue: Optional[CompletionTrackingQueue] = None
 
         self.interrupted = False
 
@@ -84,8 +83,10 @@ class Runner:
                 self.execution_queue.task_done()
 
     async def to_thread_in_pool(self, func, /, *args, **kwargs):
-        """Copy of asyncio.to_thread, but using a custom thread pool
-        (and not requiring Python 3.9)
+        """Copy of asyncio.to_thread, but:
+        - using a custom thread pool
+        - not requiring Python 3.9
+        - cancelling the future when the task is cancelled
 
         Asynchronously run function *func* in a separate thread.
 
@@ -103,41 +104,29 @@ class Runner:
         try:
             return await future
         except asyncio.CancelledError:
-            future.cancel()
+            future.cancel()  # TODO: this is just a precaution, should not be needed, remove?
             raise
 
     def initialize_in_event_loop(self):
         """
-        Needs to be called once we are in an event loop. Idempotent - should not cause problems
-        if called multiple times (from multiple run_coro() calls)
-        """
-        # NB: not needed for newer Python version (>=3.10)
-        self.resource_manager.initialize_in_event_loop()
-        if self.execution_queue is None:
-            self.execution_queue = CompletionTrackingQueue()
-            for call in self.scheduled_calls:
-                self.execution_queue.put_nowait(call)
+        Needs to be called once we are in the context of the (current) event loop.
 
-    def re_initialize(self):
+        Note: If called multiple times (via run()) the event loop will be different -
+        we need to re-initialize the synchronization primitives.
         """
-        Re-initialize the runner after an interruption
-        """
-        self.resource_manager = ResourceManager(self._resources)
+        # NB: (re-)initializing asyncio synchronization primitives not needed for newer Python
+        # versions (>=3.10?) - but queue cleanup still needed
         self.resource_manager.initialize_in_event_loop()
         self.execution_queue = CompletionTrackingQueue()
         for call in self.scheduled_calls:
-            if call.result is None:
+            if call.result is None and call.num_retries <= self.max_retries:
                 self.execution_queue.put_nowait(call)
-        # self.resource_manager.condition._lock = asyncio.Lock()  # TODO: find a better way
-        self.interrupted = False
 
     async def run_coro(self) -> Tuple[list, list]:
         """
         Actual implementation of run() - to be used by run() and run_sync()
         """
-        if self.interrupted:
-            self.re_initialize()
-
+        self.interrupted = False
         self.initialize_in_event_loop()
         assert self.resource_manager.condition is not None  # for mypy's benefit
         assert self.execution_queue is not None
@@ -165,7 +154,7 @@ class Runner:
         results = [call.result for call in self.scheduled_calls]
         exception_lists = [call.exceptions for call in self.scheduled_calls]
         if not self.interrupted:
-            self.scheduled_calls = []  # only clear if everything was completed
+            self.scheduled_calls = []  # only clear the queue if returning complete results
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
@@ -191,9 +180,6 @@ class Runner:
             except KeyboardInterrupt:
                 self.logger.warning("Interrupted, collecting already returned results")
                 self.interrupted = True
-                # self.requests_executor_pool.shutdown(
-                #     wait=False
-                # )  # immediately drop requests in progress
                 return future.result()
 
 
@@ -204,8 +190,14 @@ class ResourceManager:
         self.logger = getLogger("rate_limited.ResourceManager")
 
     def initialize_in_event_loop(self):
-        """Should only be called once we are in an event loop"""
         if self.condition is None:
+            self.condition = Condition()
+            return
+
+        current_loop = asyncio.get_running_loop()
+        if self.condition._loop is not current_loop:
+            # new event loop -
+            self.logger.debug("Detected event loop change - re-initializing condition")
             self.condition = Condition()
 
     def is_call_allowed(self, call: Call) -> bool:
@@ -238,11 +230,8 @@ class ResourceManager:
                 resource.add_usage(resource.results_usage_extractor(result))
 
     def remove_pre_allocation(self, call: Call):
-        """
-        Right now assuming that pre-allocation is only based on the call,
-        this could change to e.g. be also based on history of results
-        (would need passing the amounts around somehow)
-        """
+        # Right now assuming that pre-allocation is only based on the call, this could change
+        # to e.g. be also based on history of results
         for resource in self.resources:
             if resource.max_results_usage_estimator:
                 resource.remove_reserved(resource.max_results_usage_estimator(call))
@@ -273,5 +262,5 @@ class ResourceManager:
     def wake_workers(self):
         assert self.condition is not None
         # TODO: this is too eager, we could only wake a subset of workers
-        # (exact solution non-trivial?)
+        # (exact solution non-trivial?, gains likely negligible)
         self.condition.notify_all()
