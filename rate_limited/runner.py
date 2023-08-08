@@ -27,7 +27,7 @@ class Runner:
         self.function = function
         self.resource_manager = ResourceManager(resources)
         self.max_concurrent = max_concurrent
-        self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
+        self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
         self.progress_interval = progress_interval
         # TODO: add verification functions?
@@ -41,6 +41,8 @@ class Runner:
 
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
 
+        self.interrupted = False
+
     def schedule(self, *args, **kwargs):
         # TODO: use docstring from self.function?
         call = Call(self.function, args, kwargs)
@@ -52,7 +54,7 @@ class Runner:
 
     async def worker(self):
         assert self.execution_queue is not None
-        while True:
+        while not self.interrupted:
             # wait to get a task
             call = await self.execution_queue.get()
             # wait for resources to be available
@@ -96,7 +98,7 @@ class Runner:
         loop = events.get_running_loop()
         ctx = contextvars.copy_context()
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
-        return await loop.run_in_executor(self.executor, func_call)
+        return await loop.run_in_executor(self.requests_executor_pool, func_call)
 
     def initialize_in_event_loop(self):
         """
@@ -114,6 +116,9 @@ class Runner:
         """
         Actual implementation of run() - to be used by run() and run_sync()
         """
+        if self.interrupted:
+            raise NotImplementedError("Cannot run_coro() after interruption - not (yet) supported")
+
         self.initialize_in_event_loop()
         assert self.resource_manager.condition is not None  # for mypy's benefit
         assert self.execution_queue is not None
@@ -121,25 +126,27 @@ class Runner:
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
         pbar = ProgressBar(total=len(self.scheduled_calls))
-        while not self.execution_queue.all_tasks_done():
+        while not self.execution_queue.all_tasks_done() and not self.interrupted:
             num_completed = self.execution_queue.tasks_done_count
+            self.logger.debug(f"Tasks done: {num_completed} interrupted: {self.interrupted}")
             pbar.set_state(num_completed, num_total=self.execution_queue.all_tasks_count)
             # TODO: use a condition/signal instead? (triggered by workers when a result is ready)
+            # NB: KeyboardInterrupt handling will wait for this wait too - should not be too long
             await asyncio_sleep(self.progress_interval)
-            async with self.resource_manager.condition:
-                self.resource_manager.wake_workers()
+            if not self.interrupted:
+                async with self.resource_manager.condition:
+                    self.resource_manager.wake_workers()
         pbar.set_state(self.execution_queue.tasks_done_count)
         pbar.close()
-        self.logger.info("Queue is empty, waiting for workers to finish")
-        await self.execution_queue.join()
-        self.logger.debug("Workers finished, cancelling remaining tasks")
+        self.logger.debug("Done processing - cancelling worker tasks")
         for task in worker_tasks:
             task.cancel()
         await gather(*worker_tasks, return_exceptions=True)
         self.logger.info("Workers finished")
         results = [call.result for call in self.scheduled_calls]
         exception_lists = [call.exceptions for call in self.scheduled_calls]
-        self.scheduled_calls = []
+        if not self.interrupted:
+            self.scheduled_calls = []  # only clear if everything was completed
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
@@ -160,7 +167,15 @@ class Runner:
         """
         with ThreadPoolExecutor(1) as pool:
             future = pool.submit(self._run_sync)
-            return future.result()
+            try:
+                return future.result()
+            except KeyboardInterrupt:
+                self.logger.warning("Interrupted, collecting already returned results")
+                self.interrupted = True
+                self.requests_executor_pool.shutdown(
+                    wait=False
+                )  # immediately drop requests in progress
+                return future.result()
 
 
 class ResourceManager:
