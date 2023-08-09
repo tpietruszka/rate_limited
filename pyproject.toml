@@ -19,6 +19,7 @@ classifiers = [
 [project.optional-dependencies]
 test = [
   "pytest",
+  "pytest-xdist",
   "aiohttp",
   "requests",
 ]
