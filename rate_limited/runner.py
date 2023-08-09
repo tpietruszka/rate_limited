@@ -142,8 +142,8 @@ class Runner:
             # NB: KeyboardInterrupt handling will wait for this sleep too - should not be too long
             await asyncio_sleep(self.progress_interval)
             if not self.interrupted:
-                async with self.resource_manager.condition:
-                    self.resource_manager.wake_workers()
+                # wake up waiting workers - perhaps now resources are available
+                await self.resource_manager.notify_waiting()
         pbar.set_state(self.execution_queue.tasks_done_count)
         pbar.close()
         self.logger.debug("Done processing - cancelling worker tasks")
@@ -259,8 +259,9 @@ class ResourceManager:
         async with self.condition:
             await self.condition.wait_for(lambda: self._has_space_for_call(call))
 
-    def wake_workers(self):
+    async def notify_waiting(self):
         assert self.condition is not None
-        # TODO: this is too eager, we could only wake a subset of workers
-        # (exact solution non-trivial?, gains likely negligible)
-        self.condition.notify_all()
+        async with self.condition:
+            # TODO: this is too eager, we could only wake a subset of workers
+            # (exact solution non-trivial?, gains likely negligible)
+            self.condition.notify_all()
