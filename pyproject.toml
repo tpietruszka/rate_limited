@@ -20,6 +20,7 @@ classifiers = [
 test = [
   "pytest",
   "pytest-xdist",
+  "pytest-timeout",
   "aiohttp",
   "requests",
 ]

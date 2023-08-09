@@ -1,3 +1,4 @@
+import asyncio
 import multiprocessing
 import socketserver
 from functools import partial
@@ -28,3 +29,30 @@ def running_dummy_server():
     address = f"http://{host}:{free_port}"
     yield address
     p.terminate()
+
+
+@pytest.fixture
+def test_executor_simple():
+    """Just run the test scenario passed as argument"""
+
+    def executor(test_scenario):
+        return test_scenario()
+
+    return executor
+
+
+@pytest.fixture
+def test_executor_asyncio():
+    """
+    Run the test scenario passed as argument in an asyncio event loop
+
+    This is to mimic a Jupyter notebook, where the event loop is already running.
+    """
+
+    async def scenario_coro(test_scenario):
+        return test_scenario()
+
+    def executor(test_scenario):
+        return asyncio.run(scenario_coro(test_scenario))
+
+    return executor

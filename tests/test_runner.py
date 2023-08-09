@@ -19,29 +19,35 @@ def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
 
 
 def dummy_resources(
-    num_requests: int = 3, num_points: int = 20, with_estimation: bool = True
+    num_requests: int = 3,
+    num_points: int = 20,
+    with_estimation: bool = True,
+    time_window_seconds=5,
 ) -> List[Resource]:
     estimator = (lambda call: 2 * call.get_argument("how_many")) if with_estimation else None
     return [
         Resource(
-            "requests", num_requests, time_window_seconds=5, arguments_usage_extractor=lambda _: 1
+            "requests",
+            num_requests,
+            time_window_seconds=time_window_seconds,
+            arguments_usage_extractor=lambda _: 1,
         ),
         Resource(
             name="points",
             quota=num_points,
-            time_window_seconds=5,
+            time_window_seconds=time_window_seconds,
             results_usage_extractor=lambda x: x["used_points"],
             max_results_usage_estimator=estimator,
         ),
     ]
 
 
-def get_runner(resources: List[Resource]) -> Runner:
+def get_runner(resources: List[Resource], max_concurrent=10) -> Runner:
     """Runner instantiated to call the dummy API"""
     return Runner(
         dummy_client,
         resources=resources,
-        max_concurrent=10,
+        max_concurrent=max_concurrent,
         max_retries=5,
     )
 
@@ -187,3 +193,36 @@ def test_runner_with_estimation(running_dummy_server):
         result["used_points"] + result["state_before_check"]["points"] for result in results
     ]
     assert max(points_used) <= num_requests
+
+
+@pytest.mark.parametrize("test_executor_name", ["test_executor_simple", "test_executor_asyncio"])
+@pytest.mark.timeout(15, method="thread")
+def test_two_runs_to_completion(running_dummy_server, request, test_executor_name):
+    """
+    After a run(), we support schedule()-ing more tasks and running them.
+
+    Running twice - from normal sync code, and from a context with an event loop.
+    """
+    test_executor = request.getfixturevalue(test_executor_name)
+
+    def scenario():
+        num_requests = 4
+        runner = get_runner(dummy_resources(num_requests=2, num_points=100, time_window_seconds=2))
+
+        for _ in range(num_requests):
+            runner.schedule(running_dummy_server, 1)
+
+        results, exceptions = runner.run()
+        outputs = [result["output"] for result in results]
+        assert outputs == ["x"] * num_requests
+        assert exceptions == [[]] * num_requests
+
+        for _ in range(num_requests):
+            runner.schedule(running_dummy_server, 2)
+
+        results, exceptions = runner.run()
+        outputs = [result["output"] for result in results]
+        assert outputs == ["xx"] * num_requests
+        assert exceptions == [[]] * num_requests
+
+    test_executor(scenario)
