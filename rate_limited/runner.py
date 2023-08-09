@@ -1,18 +1,17 @@
 import asyncio
-import contextvars
-import functools
 import traceback
-from asyncio import Condition, create_task, events, gather
+from asyncio import create_task, gather
 from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from logging import getLogger
 from typing import Callable, Collection, List, Optional, Tuple
 
 from rate_limited.calls import Call
 from rate_limited.progress_bar import ProgressBar
 from rate_limited.queue import CompletionTrackingQueue
-from rate_limited.resources import Resource, Unit
+from rate_limited.resource_manager import ResourceManager
+from rate_limited.resources import Resource
+from rate_limited.threading_utils import to_thread_in_pool
 
 
 class Runner:
@@ -65,7 +64,9 @@ class Runner:
             self.resource_manager.pre_allocate(call)
             try:
                 # TODO: add a timeout mechanism?
-                call.result = await self.to_thread_in_pool(self.function, *call.args, **call.kwargs)
+                call.result = await to_thread_in_pool(
+                    self.requests_executor_pool, self.function, *call.args, **call.kwargs
+                )
                 # TODO: are there cases where we need to register result-based usage on error?
                 # (one case: if we have user-defined verification functions)
                 self.resource_manager.register_result(call.result)
@@ -81,31 +82,6 @@ class Runner:
             finally:
                 self.resource_manager.remove_pre_allocation(call)
                 self.execution_queue.task_done()
-
-    async def to_thread_in_pool(self, func, /, *args, **kwargs):
-        """Copy of asyncio.to_thread, but:
-        - using a custom thread pool
-        - not requiring Python 3.9
-        - cancelling the future when the task is cancelled
-
-        Asynchronously run function *func* in a separate thread.
-
-        Any *args and **kwargs supplied for this function are directly passed
-        to *func*. Also, the current :class:`contextvars.Context` is propagated,
-        allowing context variables from the main thread to be accessed in the
-        separate thread.
-
-        Return a coroutine that can be awaited to get the eventual result of *func*.
-        """
-        loop = events.get_running_loop()
-        ctx = contextvars.copy_context()
-        func_call = functools.partial(ctx.run, func, *args, **kwargs)
-        future = loop.run_in_executor(self.requests_executor_pool, func_call)
-        try:
-            return await future
-        except asyncio.CancelledError:
-            future.cancel()  # TODO: this is just a precaution, should not be needed, remove?
-            raise
 
     def initialize_in_event_loop(self):
         """
@@ -181,87 +157,3 @@ class Runner:
                 self.logger.warning("Interrupted, collecting already returned results")
                 self.interrupted = True
                 return future.result()
-
-
-class ResourceManager:
-    def __init__(self, resources: Collection[Resource]):
-        self.resources = list(resources)
-        self.condition: Optional[Condition] = None
-        self.logger = getLogger("rate_limited.ResourceManager")
-
-    def initialize_in_event_loop(self):
-        if self.condition is None:
-            self.condition = Condition()
-            return
-
-        current_loop = asyncio.get_running_loop()
-        if self.condition._loop is not current_loop:
-            # new event loop -
-            self.logger.debug("Detected event loop change - re-initializing condition")
-            self.condition = Condition()
-
-    def is_call_allowed(self, call: Call) -> bool:
-        """
-        Checks if the resources needed are below the quota - otherwise it will never be allowed
-        """
-        for resource in self.resources:
-            needed = Unit(0)
-            if resource.arguments_usage_extractor is not None:
-                needed += resource.arguments_usage_extractor(call)
-            if resource.max_results_usage_estimator is not None:
-                needed += resource.max_results_usage_estimator(call)
-            if needed > resource.quota:
-                return False
-        return True
-
-    def register_call(self, call: Call):
-        for resource in self.resources:
-            if resource.arguments_usage_extractor:
-                resource.add_usage(resource.arguments_usage_extractor(call))
-
-    def pre_allocate(self, call: Call):
-        for resource in self.resources:
-            if resource.max_results_usage_estimator:
-                resource.reserve_amount(resource.max_results_usage_estimator(call))
-
-    def register_result(self, result):
-        for resource in self.resources:
-            if resource.results_usage_extractor:
-                resource.add_usage(resource.results_usage_extractor(result))
-
-    def remove_pre_allocation(self, call: Call):
-        # Right now assuming that pre-allocation is only based on the call, this could change
-        # to e.g. be also based on history of results
-        for resource in self.resources:
-            if resource.max_results_usage_estimator:
-                resource.remove_reserved(resource.max_results_usage_estimator(call))
-
-    def get_next_usage_expiration(self) -> datetime:
-        return min(resource.get_next_expiration() for resource in self.resources)
-
-    def _has_space_for_call(self, call: Call) -> bool:
-        # important - we should NOT have any async code here!
-        # (because we are inside a condition check)
-        for resource in self.resources:
-            needed = Unit(0)
-            if resource.arguments_usage_extractor is not None:
-                needed += resource.arguments_usage_extractor(call)
-            if resource.max_results_usage_estimator is not None:
-                needed += resource.max_results_usage_estimator(call)
-            if not resource.is_available(needed):
-                self.logger.debug(f"resource {resource.name} is not available: {resource}")
-                return False
-        self.logger.debug("all resources are available")
-        return True
-
-    async def wait_for_resources(self, call: Call):
-        assert self.condition is not None
-        async with self.condition:
-            await self.condition.wait_for(lambda: self._has_space_for_call(call))
-
-    async def notify_waiting(self):
-        assert self.condition is not None
-        async with self.condition:
-            # TODO: this is too eager, we could only wake a subset of workers
-            # (exact solution non-trivial?, gains likely negligible)
-            self.condition.notify_all()
