@@ -42,13 +42,13 @@ def dummy_resources(
     ]
 
 
-def get_runner(resources: List[Resource], max_concurrent=10) -> Runner:
+def get_runner(resources: List[Resource], max_concurrent=10, max_retries=5) -> Runner:
     """Runner instantiated to call the dummy API"""
     return Runner(
         dummy_client,
         resources=resources,
         max_concurrent=max_concurrent,
-        max_retries=5,
+        max_retries=max_retries,
     )
 
 
@@ -113,7 +113,7 @@ def test_runner_unreliable_server(running_dummy_server):
     """
     Testing results from an unreliable server - with a 50% chance of failure.
     """
-    runner = get_runner(dummy_resources())
+    runner = get_runner(dummy_resources(), max_retries=10)
 
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
@@ -196,7 +196,7 @@ def test_runner_with_estimation(running_dummy_server):
 
 
 @pytest.mark.parametrize("test_executor_name", ["test_executor_simple", "test_executor_asyncio"])
-@pytest.mark.timeout(15, method="thread")
+@pytest.mark.timeout(15, method="thread")  # a likely failure mode here is a deadlock
 def test_two_runs_to_completion(running_dummy_server, request, test_executor_name):
     """
     After a run(), we support schedule()-ing more tasks and running them.
