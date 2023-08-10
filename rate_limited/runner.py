@@ -42,8 +42,14 @@ class Runner:
 
         self.interrupted = False
 
-    def schedule(self, *args, **kwargs):
-        # TODO: use docstring from self.function?
+    def schedule(self, *args, **kwargs) -> None:
+        """
+        Use to schedule a call to the function
+
+        If the normal call looked liked `my_function("some text", temperature=0.5)`, then
+        `runner.schedule("some text", temperature=0.5)` should be used instead.
+        """
+        # TODO: use docstring from self.function at runtime
         call = Call(self.function, args, kwargs)
         if not self.resource_manager.is_call_allowed(call):
             raise ValueError(f"Call {call} exceeds resource quota - will never be executed")
@@ -51,52 +57,31 @@ class Runner:
         if self.execution_queue is not None:
             self.execution_queue.put_nowait(call)
 
-    async def worker(self):
-        assert self.execution_queue is not None
-        while not self.interrupted:
-            # wait to get a task
-            call = await self.execution_queue.get()
-            # wait for resources to be available
-            await self.resource_manager.wait_for_resources(call)
+    def run(self) -> Tuple[list, list]:
+        """
+        Runs the scheduled calls, returning a tuple of:
+        - results (list, in order of scheduling) and
+        - exceptions(list of lists, in order of scheduling)
 
-            # starting to execute - but first, register the usage
-            self.resource_manager.register_call(call)
-            self.resource_manager.pre_allocate(call)
+        Can be called from both sync and async code
+        (so that the same code can be used in a script and a notebook - Jupyter runs an event loop)
+
+        Handles KeyboardInterrupt (SIGINT) gracefully by returning partial results.
+        """
+        with ThreadPoolExecutor(1) as pool:
+            future = pool.submit(self._run_sync)
             try:
-                # TODO: add a timeout mechanism?
-                call.result = await to_thread_in_pool(
-                    self.requests_executor_pool, self.function, *call.args, **call.kwargs
-                )
-                # TODO: are there cases where we need to register result-based usage on error?
-                # (one case: if we have user-defined verification functions)
-                self.resource_manager.register_result(call.result)
-            except Exception as e:
-                will_retry = call.num_retries < self.max_retries
-                self.logger.warning(
-                    f"Exception occurred, will retry: {will_retry}\n{traceback.format_exc()}"
-                )
-                call.exceptions.append(e)
-                if will_retry:
-                    call.num_retries += 1
-                    self.execution_queue.put_nowait(call)
-            finally:
-                self.resource_manager.remove_pre_allocation(call)
-                self.execution_queue.task_done()
+                return future.result()
+            except KeyboardInterrupt:
+                self.logger.warning("Interrupted, collecting already returned results")
+                self.interrupted = True
+                return future.result()
 
-    def initialize_in_event_loop(self):
+    def _run_sync(self) -> Tuple[list, list]:
         """
-        Needs to be called once we are in the context of the (current) event loop.
-
-        Note: If called multiple times (via run()) the event loop will be different -
-        we need to re-initialize the synchronization primitives.
+        Execute run_coro() from sync code - starting a new event loop
         """
-        # NB: (re-)initializing asyncio synchronization primitives not needed for newer Python
-        # versions (>=3.10?) - but queue cleanup still needed
-        self.resource_manager.initialize_in_event_loop()
-        self.execution_queue = CompletionTrackingQueue()
-        for call in self.scheduled_calls:
-            if call.result is None and call.num_retries <= self.max_retries:
-                self.execution_queue.put_nowait(call)
+        return asyncio.run(self.run_coro())
 
     async def run_coro(self) -> Tuple[list, list]:
         """
@@ -134,26 +119,49 @@ class Runner:
         # TODO: consider returning a generator, instead of waiting for all calls to finish?
         return results, exception_lists
 
-    def _run_sync(self) -> Tuple[list, list]:
+    def initialize_in_event_loop(self):
         """
-        Execute run_coro() from sync code - starting a new event loop
-        """
-        return asyncio.run(self.run_coro())
+        Needs to be called once we are in the context of the (current) event loop.
 
-    def run(self) -> Tuple[list, list]:
+        Note: If called multiple times (via run()) the event loop will be different -
+        we need to re-initialize the synchronization primitives.
         """
-        Runs the scheduled calls, returning a tuple of:
-        - results (list, in order of scheduling) and
-        - exceptions(list of lists, in order of scheduling)
+        # NB: (re-)initializing asyncio synchronization primitives not needed for newer Python
+        # versions (>=3.10?) - but queue cleanup still needed
+        self.resource_manager.initialize_in_event_loop()
+        self.execution_queue = CompletionTrackingQueue()
+        for call in self.scheduled_calls:
+            if call.result is None and call.num_retries <= self.max_retries:
+                self.execution_queue.put_nowait(call)
 
-        Can be called from both sync and async code
-        (so that the same code can be used in a script and a notebook - Jupyter runs an event loop)
-        """
-        with ThreadPoolExecutor(1) as pool:
-            future = pool.submit(self._run_sync)
+    async def worker(self):
+        assert self.execution_queue is not None
+        while not self.interrupted:
+            # wait to get a task
+            call = await self.execution_queue.get()
+            # wait for resources to be available
+            await self.resource_manager.wait_for_resources(call)
+
+            # starting to execute - but first, register the usage
+            self.resource_manager.register_call(call)
+            self.resource_manager.pre_allocate(call)
             try:
-                return future.result()
-            except KeyboardInterrupt:
-                self.logger.warning("Interrupted, collecting already returned results")
-                self.interrupted = True
-                return future.result()
+                # TODO: add a timeout mechanism?
+                call.result = await to_thread_in_pool(
+                    self.requests_executor_pool, self.function, *call.args, **call.kwargs
+                )
+                # TODO: are there cases where we need to register result-based usage on error?
+                # (one case: if we have user-defined verification functions)
+                self.resource_manager.register_result(call.result)
+            except Exception as e:
+                will_retry = call.num_retries < self.max_retries
+                self.logger.warning(
+                    f"Exception occurred, will retry: {will_retry}\n{traceback.format_exc()}"
+                )
+                call.exceptions.append(e)
+                if will_retry:
+                    call.num_retries += 1
+                    self.execution_queue.put_nowait(call)
+            finally:
+                self.resource_manager.remove_pre_allocation(call)
+                self.execution_queue.task_done()
