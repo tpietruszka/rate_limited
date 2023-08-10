@@ -18,9 +18,17 @@ class Call:
         all_args_dict = signature(self.function).bind(*self.args, **self.kwargs).arguments
         return all_args_dict
 
+    @cached_property
+    def default_params(self) -> dict:
+        return {
+            name: param.default
+            for name, param in signature(self.function).parameters.items()
+            if param.default is not param.empty
+        }
+
     def get_argument(self, name: str) -> Any:
         """
-        Returns the value of the argument with the given name - whether it was passed positionally
-        or as a keyword argument.
+        Returns the value of the argument with the given name - whether it was passed positionally,
+        as a keyword argument, or as a default value.
         """
-        return self.all_arguments_dict.get(name)
+        return self.all_arguments_dict.get(name) or self.default_params.get(name)
