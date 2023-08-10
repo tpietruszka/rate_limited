@@ -20,7 +20,7 @@ class Runner:
         function: Callable,
         resources: Collection[Resource],
         max_concurrent: int,
-        max_retries: int = 0,
+        max_retries: int = 5,
         progress_interval: float = 1.0,
     ):
         self.function = function
