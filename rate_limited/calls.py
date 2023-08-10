@@ -16,7 +16,8 @@ class Call:
     @cached_property
     def all_arguments_dict(self) -> dict:
         all_args_dict = signature(self.function).bind(*self.args, **self.kwargs).arguments
-        return all_args_dict
+        kwargs = all_args_dict.pop("kwargs", {})
+        return {**all_args_dict, **kwargs}
 
     @cached_property
     def default_params(self) -> dict:
