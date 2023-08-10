@@ -111,7 +111,7 @@ This uses pytest-xdist to run tests in parallel, but will not support `--pdb` or
 
 To debug tests in detail, examine the usage of resources etc, run:
 ```shell
-pytest --log-cli-level="DEBUG --pdb -k name_of_test"
+pytest --log-cli-level="DEBUG" --pdb -k name_of_test
 ```
 
 ### Linting and formatting
