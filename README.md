@@ -32,6 +32,11 @@ In short:
 - call `Runner.schedule()` to schedule a request
 - call `Runner.run()` to run the scheduled requests, get the results and any exceptions raised
 
+### Installation
+```shell
+pip install rate_limited
+```
+
 ### OpenAI example
 ```python
 import openai
