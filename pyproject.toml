@@ -36,6 +36,7 @@ lint = [
   "flake8-isort",
   "mypy",
   "types-requests",
+  "types-tqdm",
   "aiohttp",
 ]
 
