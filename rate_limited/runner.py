@@ -85,7 +85,16 @@ class Runner:
 
     async def run_coro(self) -> Tuple[list, list]:
         """
-        Actual implementation of run() - to be used by run() and run_sync()
+        Coroutine actually implementing the execution of the scheduled calls
+
+        Can be used directly from async code (e.g. in a Jupyter notebook):
+        ```
+        results, exceptions = await runner.run_coro()
+        ```
+        or indirectly via run() - from any environment:
+        ```
+        results, exceptions = runner.run()
+        ```
         """
         self.interrupted = False
         self.initialize_in_event_loop()
