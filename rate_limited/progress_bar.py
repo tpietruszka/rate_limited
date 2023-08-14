@@ -8,7 +8,7 @@ class ProgressBar:
         try:
             from tqdm import tqdm
 
-            self.pbar = tqdm(total=total)
+            self.pbar: Optional[tqdm] = tqdm(total=total)
         except ImportError:
             self.pbar = None
 
