@@ -132,8 +132,6 @@ flake8 && black --check . && mypy .
 
 ## TODOs:
 - improved README and usage examples
-- PyPI package
-- CI - for testing and publishing to PyPI
 - more ready-made API descriptions - incl. batched ones?
 - fix the "interrupt and resume" test in Python 3.11
 ### Nice to have:
@@ -144,7 +142,8 @@ flake8 && black --check . && mypy .
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
 - right now, if the API is responding quickly, we have a burst of progress, then a long wait
   (for the quota to renew), then another burst of progress. Either make this smoother (as above)
-  or inform the user about the progress better
+  or inform the user about the progress better (write a message if expecting to wait for a long
+  time before the next batch of results)
 - if/where possible, detect RateLimitExceeded - notify the user, slow down
 - should runner.schedule return futures and enable "streaming" of results?
 - add timeouts option? (for now, the user is responsible for handling timeouts)
