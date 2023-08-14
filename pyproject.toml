@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Use slow, rate-limited APIs - like those of Large Language Models - as efficiently as possible"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
