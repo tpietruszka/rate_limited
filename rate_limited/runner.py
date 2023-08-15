@@ -3,6 +3,7 @@ import traceback
 from asyncio import create_task, gather
 from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
+from inspect import signature
 from logging import getLogger
 from typing import Callable, Collection, List, Optional, Tuple
 
@@ -39,8 +40,9 @@ class Runner:
         # queue of calls to be executed in the current run()/run_coro() call, including retries
         # (needs to be initialized in the context of the event loop we will execute in)
         self.execution_queue: Optional[CompletionTrackingQueue] = None
-
         self.interrupted = False
+
+        self._update_schedule_as_wrapper(function)
 
     def schedule(self, *args, **kwargs) -> None:
         """
@@ -49,7 +51,6 @@ class Runner:
         If the normal call looked liked `my_function("some text", temperature=0.5)`, then
         `runner.schedule("some text", temperature=0.5)` should be used instead.
         """
-        # TODO: use docstring from self.function at runtime
         call = Call(self.function, args, kwargs)
         if not self.resource_manager.is_call_allowed(call):
             raise ValueError(f"Call {call} exceeds resource quota - will never be executed")
@@ -174,3 +175,30 @@ class Runner:
             finally:
                 self.resource_manager.remove_pre_allocation(call)
                 self.execution_queue.task_done()
+
+    def _update_schedule_as_wrapper(self, function):
+        """
+        Update the schedule() method to have a useful signature and docstring as the wrapped
+        function.
+        """
+        # TODO: consider more robust wrapper behavior, support VS Code better - maybe using `wrapt`
+
+        qualname = getattr(function, "__qualname__")
+        name = getattr(function, "__name__")
+        module = getattr(function, "__module__")
+        orig_docstring = getattr(function, "__doc__") or "[Docstring not found]"
+        signature_rendered = str(signature(function))
+
+        new_docstring = (
+            f"Schedule a call to {qualname} in {module}\n"
+            "Returns None - call run() to get results\n\n"
+            f"{name}{signature_rendered}\n"
+            f"Docstring:\n\n"
+            f"{orig_docstring}"
+        )
+        self.schedule.__func__.__doc__ = new_docstring
+
+        annotations = getattr(function, "__annotations__", {})
+        annotations.update({"return": None})
+        self.schedule.__func__.__annotations__ = annotations
+        self.schedule.__func__.__wrapped__ = function

@@ -137,8 +137,6 @@ flake8 && black --check . && mypy .
 ### Nice to have:
 - add an optional "result verification" mechanism, for when the server might return, but 
   the results might be incorrect (e.g. LM not conforming with the given format) - so we retry
-- have Runner.schedule show the docstring of the wrapped function, so that the user can see
-  the arguments and their defaults
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
 - right now, if the API is responding quickly, we have a burst of progress, then a long wait
   (for the quota to renew), then another burst of progress. Either make this smoother (as above)
@@ -151,3 +149,4 @@ flake8 && black --check . && mypy .
   coupling too tightly with their API?
 - tests (and explicit support?) for different ways of registering usage
 - tests with and without tqdm installed, somehow (CI + different environments? patching?)
+- more robust wrapper-like behavior of schedule() - more complete support of VS Code
