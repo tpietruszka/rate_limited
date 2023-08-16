@@ -22,6 +22,9 @@ classifiers = [
 "Bug Tracker" = "https://github.com/tpietruszka/rate_limited/issues"
 
 [project.optional-dependencies]
+progress = [
+  "tqdm",
+]
 test = [
   "pytest",
   "pytest-xdist",
