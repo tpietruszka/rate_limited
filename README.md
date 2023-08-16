@@ -1,4 +1,8 @@
 # rate_limited
+[![PyPI version](https://badge.fury.io/py/rate-limited.svg)](https://badge.fury.io/py/rate-limited)
+![Python versions](https://img.shields.io/badge/python-3.8+-blue.svg)
+[![Lint and test](https://github.com/tpietruszka/rate_limited/actions/workflows/lint-and-test.yml/badge.svg?branch=main)](https://github.com/tpietruszka/rate_limited/actions/workflows/lint-and-test.yml?query=branch:main)
+[![Publish to PyPI](https://github.com/tpietruszka/rate_limited/actions/workflows/pypi-publish.yml/badge.svg)](https://github.com/tpietruszka/rate_limited/actions/workflows/pypi-publish.yml)
 
 A lightweight package meant to enable **efficient use of slow, rate-limited APIs** - like
 those of Large Language Models (LLMs).
