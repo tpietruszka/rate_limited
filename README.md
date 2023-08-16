@@ -146,11 +146,11 @@ flake8 && black --check . && mypy .
   (for the quota to renew), then another burst of progress. Either make this smoother (as above)
   or inform the user about the progress better (write a message if expecting to wait for a long
   time before the next batch of results)
+- text-based logging if tqdm is not installed
 - if/where possible, detect RateLimitExceeded - notify the user, slow down
 - should runner.schedule return futures and enable "streaming" of results?
 - add timeouts option? (for now, the user is responsible for handling timeouts)
 - OpenAI shares information about rate limits in http response headers - could it be used without
   coupling too tightly with their API?
 - tests (and explicit support?) for different ways of registering usage
-- tests with and without tqdm installed, somehow (CI + different environments? patching?)
 - more robust wrapper-like behavior of schedule() - more complete support of VS Code
