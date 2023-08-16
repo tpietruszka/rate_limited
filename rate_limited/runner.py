@@ -23,6 +23,7 @@ class Runner:
         max_concurrent: int,
         max_retries: int = 5,
         progress_interval: float = 1.0,
+        long_wait_warning_seconds: Optional[float] = 2.0,
     ):
         self.function = function
         self.resource_manager = ResourceManager(resources)
@@ -30,6 +31,7 @@ class Runner:
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
         self.progress_interval = progress_interval
+        self.long_wait_warning_seconds = long_wait_warning_seconds
         # TODO: add verification functions?
         # (checking if response meets criteria, retrying otherwise)
 
@@ -104,11 +106,24 @@ class Runner:
 
         worker_tasks = [create_task(self.worker()) for _ in range(self.max_concurrent)]
 
-        pbar = ProgressBar(total=len(self.scheduled_calls))
+        pbar = ProgressBar(
+            total=len(self.scheduled_calls), long_wait_seconds=self.long_wait_warning_seconds
+        )
         while not self.execution_queue.all_tasks_done() and not self.interrupted:
             num_completed = self.execution_queue.tasks_done_count
             self.logger.debug(f"Tasks done: {num_completed} interrupted: {self.interrupted}")
             pbar.set_state(num_completed, num_total=self.execution_queue.all_tasks_count)
+
+            # all workers waiting for resources and no usage expires soon -> show a warning
+            next_progress_estimate = (
+                self.resource_manager.get_next_usage_expiration()
+                if self.resource_manager.num_waiting_for_resources == self.max_concurrent
+                else None
+            )
+            pbar.update_long_wait_warning(
+                next_progress_estimate, "All workers waiting for resources"
+            )
+
             # TODO: use a condition/signal instead? though OS support varies
             # NB: KeyboardInterrupt handling will wait for this sleep too - should not be too long
             await asyncio_sleep(self.progress_interval)

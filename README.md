@@ -142,10 +142,6 @@ flake8 && black --check . && mypy .
 - add an optional "result verification" mechanism, for when the server might return, but 
   the results might be incorrect (e.g. LM not conforming with the given format) - so we retry
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
-- right now, if the API is responding quickly, we have a burst of progress, then a long wait
-  (for the quota to renew), then another burst of progress. Either make this smoother (as above)
-  or inform the user about the progress better (write a message if expecting to wait for a long
-  time before the next batch of results)
 - text-based logging if tqdm is not installed
 - if/where possible, detect RateLimitExceeded - notify the user, slow down
 - should runner.schedule return futures and enable "streaming" of results?

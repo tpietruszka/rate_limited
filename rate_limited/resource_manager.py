@@ -13,11 +13,13 @@ class ResourceManager:
         self.resources = list(resources)
         self.condition: Optional[Condition] = None
         self.logger = getLogger("rate_limited.ResourceManager")
+        self.num_waiting_for_resources = 0
 
     def initialize_in_event_loop(self):
         if self.condition is None:
             self.condition = Condition()
             return
+        self.num_waiting_for_resources = 0
 
         current_loop = asyncio.get_running_loop()
         if self.condition._loop is not current_loop:  # type: ignore
@@ -82,7 +84,9 @@ class ResourceManager:
     async def wait_for_resources(self, call: Call):
         assert self.condition is not None
         async with self.condition:
+            self.num_waiting_for_resources += 1
             await self.condition.wait_for(lambda: self._has_space_for_call(call))
+            self.num_waiting_for_resources -= 1
 
     async def notify_waiting(self):
         assert self.condition is not None

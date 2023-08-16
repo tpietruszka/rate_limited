@@ -74,14 +74,17 @@ class Resource:
     def remove_reserved(self, amount: Unit) -> None:
         self._reserved -= amount
 
-    def get_amount_used(self) -> Unit:
-        """
-        Returns the amount used in the last time_window_seconds - ignoring reserved amounts.
-        """
+    def _discard_old_logs(self):
         while self.usage_log and (
             (datetime.now() - self.usage_log[0].timestamp).seconds > self.time_window_seconds
         ):
             self._used -= self.usage_log.popleft().amount
+
+    def get_amount_used(self) -> Unit:
+        """
+        Returns the amount used in the last time_window_seconds - ignoring reserved amounts.
+        """
+        self._discard_old_logs()
         return self._used
 
     def get_amount_available(self) -> Unit:
@@ -101,6 +104,7 @@ class Resource:
         Returns the timestamp of the next expiration of a usage log. Returns current time
         if there are no usage logs.
         """
+        self._discard_old_logs()
         if not self.usage_log:
             return datetime.now()
         return self.usage_log[0].timestamp + timedelta(seconds=self.time_window_seconds)
