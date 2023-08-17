@@ -21,7 +21,7 @@ class Resource:
         quota: Unit,
         time_window_seconds: float,
         arguments_usage_extractor: Optional[Callable[[Call], Unit]] = None,
-        results_usage_extractor: Optional[Callable[[Result], Unit]] = None,
+        results_usage_extractor: Optional[Callable[[Call, Result], Unit]] = None,
         max_results_usage_estimator: Optional[Callable[[Call], Unit]] = None,
     ):
         """
@@ -32,9 +32,9 @@ class Resource:
             quota: maximum amount of the resource that can be used in the time window
             time_window_seconds: time window in seconds
             arguments_usage_extractor: function that extracts the amount of resource used from
-                the arguments
+                the arguments, "billed" before the call is made
             results_usage_extractor: function that extracts the amount of resource used from
-                the results
+                the results (and the arguments), "billed" after the call is made
             max_results_usage_estimator: function that extracts an upper bound on the amount of
                 resource that might be used when results are returned, based on the arguments
                 (this is used to pre-allocate usage, pre-allocation is then replaced with the
@@ -50,7 +50,7 @@ class Resource:
 
         self.arguments_usage_extractor = arguments_usage_extractor
         self.results_usage_extractor = results_usage_extractor
-        self.max_results_usage_estimator = max_results_usage_estimator  # TODO: consider renaming
+        self.max_results_usage_estimator = max_results_usage_estimator
 
         if self.max_results_usage_estimator and not self.results_usage_extractor:
             raise ValueError(

@@ -177,7 +177,7 @@ class Runner:
                     self.requests_executor_pool, self.function, *call.args, **call.kwargs
                 )
                 # TODO: are there cases where we need to register result-based usage on error?
-                self.resource_manager.register_result(result)
+                self.resource_manager.register_result(call, result)
                 if self.validation_function is not None:
                     if not self.validation_function(result):
                         raise ValidationError(

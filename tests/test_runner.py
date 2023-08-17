@@ -38,7 +38,7 @@ def dummy_resources(
             name="points",
             quota=num_points,
             time_window_seconds=time_window_seconds,
-            results_usage_extractor=lambda x: x["used_points"],
+            results_usage_extractor=lambda _, result: result["used_points"],
             max_results_usage_estimator=estimator,
         ),
     ]

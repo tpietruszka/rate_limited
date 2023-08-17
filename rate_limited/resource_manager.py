@@ -4,7 +4,7 @@ from datetime import datetime
 from logging import getLogger
 from typing import Collection, Optional
 
-from rate_limited.calls import Call
+from rate_limited.calls import Call, Result
 from rate_limited.resources import Resource, Unit
 
 
@@ -51,10 +51,10 @@ class ResourceManager:
             if resource.max_results_usage_estimator:
                 resource.reserve_amount(resource.max_results_usage_estimator(call))
 
-    def register_result(self, result):
+    def register_result(self, call: Call, result: Result):
         for resource in self.resources:
             if resource.results_usage_extractor:
-                resource.add_usage(resource.results_usage_extractor(result))
+                resource.add_usage(resource.results_usage_extractor(call, result))
 
     def remove_pre_allocation(self, call: Call):
         # Right now assuming that pre-allocation is only based on the call, this could change
