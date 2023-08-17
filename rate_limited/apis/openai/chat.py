@@ -2,7 +2,7 @@ from functools import partial
 from typing import List
 
 from rate_limited.apis.common import get_requests_per_minute
-from rate_limited.calls import Call
+from rate_limited.calls import Call, Result
 from rate_limited.resources import Resource
 
 
@@ -28,7 +28,7 @@ def get_tokens_per_minute(quota: int, model_max_len: int) -> Resource:
     )
 
 
-def get_used_tokens(results: dict) -> int:
+def get_used_tokens(call: Call, results: Result) -> int:
     total_tokens = results.get("usage", {}).get("total_tokens", None)
     if total_tokens is None:
         raise ValueError("Could not find total_tokens in results")

@@ -23,24 +23,33 @@ those of Large Language Models (LLMs).
   - handles timeouts (requests will not hang forever)
   - raises an exception if the request fails (or the server returns an error / an "invalid" response)
 - requests are independent from each other, do not rely on order, can be retried if failed
-- the server verifies rate limits when it gets the request, records usage of resources upon
-  completion - right before returning the results (this is a pessimistic assumption).
 - we want a standard, simple interface for the user - working the same way in a script and in a
   notebook (+ most data scientists do not want to deal with asyncio). Therefore, `Runner.run()` is
   a blocking call, with the same behavior regardless of the context.
 - async use is also supported - via `run_coro()` - but it will not support `KeyboardInterrupt`
   handling.
 
-## Usage
-In short:
-- wrap your function with a `Runner()`, describing the rate limits you have
-- call `Runner.schedule()` to schedule a request
-- call `Runner.run()` to run the scheduled requests, get the results and any exceptions raised
-
-### Installation
+## Installation
 ```shell
 pip install rate_limited
 ```
+
+## Usage
+In short:
+- wrap your function with a `Runner()`, describing the rate limits you have
+- call `Runner.schedule()` to schedule a request - with the same arguments as you would call the
+  original function
+- call `Runner.run()` to run the scheduled requests, get the results and any exceptions raised
+
+### Creating a Runner
+The following arguments are required:
+- `function` - the function to be called
+- `resources` - a list of `Resource` objects, describing the rate limits you have (see examples below)
+- `max_concurrent` - the maximum number of requests to be executed in parallel
+Important optional arguments:
+- `max_retries` - the maximum number of retries for a single request (default: 5)
+- `validation_function` - a function that validates the response and returns `True` if it is valid
+  (e.g. conforms to the schema you expect). If not valid, the request will be retried.
 
 ### OpenAI example
 ```python
@@ -107,6 +116,46 @@ resources = [
 ]
 ```
 
+### More complex resource descriptions
+
+Overall, the core of an API description is a list of `Resource` objects, each describing a single
+resource and its limit - e.g. "requests per minute", "tokens per minute", "images per hour", etc.
+
+Each resource has:
+- a name (just for logging/debugging)
+- a quota (e.g. 100)
+- a time window (e.g. 60 seconds)
+- functions that extract the "billing" information:
+  - `arguments_usage_extractor`
+  - `results_usage_extractor`
+  - `max_results_usage_estimator`
+
+Two distinct "billing" models are supported:
+- Before the call - we register usage before making the call, based on the arguments of the call.
+
+  In these cases, just `arguments_usage_extractor` is needed.
+- After the call - we register usage after making the call, based on the results of the call,
+  and possibly the arguments (if needed for some complex cases).
+
+  To avoid sending a flood or requests before the first ones complete (and we register any usage)
+  we need to estimate the maximum usage of each call, based on its arguments. We
+  "pre-allocate" this usage, then register the actual usage after the call completes.
+
+  In these cases, `results_usage_extractor` and `max_results_usage_estimator` are needed.
+
+Both approaches can be used in the same Resource description if needed.
+
+Note: it is assumed that resource usage "expires" fully after the time window elapses, without a
+"gradual" decline. Some APIs (OpenAI) might use the "gradual" approach, and differ in other details,
+but this approach seems sufficient to get "close enough" to the actual rate limits, without running
+into them.
+
+See [apis.openai.chat](./rate_limited/apis/openai/chat.py) for an example of a more complex API
+description with multiple resources.
+
+
+
+
 ### Limiting the number of concurrent requests
 
 The `max_concurrent` argument of `Runner` controls the number of concurrent requests.
@@ -159,14 +208,15 @@ flake8 && black --check . && mypy .
 ```
 
 ## TODOs:
-- improved README and usage examples
 - more ready-made API descriptions - incl. batched ones?
 - fix the "interrupt and resume" test in Python 3.11
 ### Nice to have:
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
 - text-based logging if tqdm is not installed
 - if/where possible, detect RateLimitExceeded - notify the user, slow down
-- should runner.schedule return futures and enable "streaming" of results?
+- support "streaming" and/or continuous operation:
+  - enable scheduling calls while running and/or getting inputs from generators
+  - support "streaming" results - perhaps similar to "as_completed" in asyncio?
 - add timeouts option? (for now, the user is responsible for handling timeouts)
 - OpenAI shares information about rate limits in http response headers - could it be used without
   coupling too tightly with their API?

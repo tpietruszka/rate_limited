@@ -5,9 +5,9 @@ from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from inspect import signature
 from logging import getLogger
-from typing import Any, Callable, Collection, List, Optional, Tuple
+from typing import Callable, Collection, List, Optional, Tuple
 
-from rate_limited.calls import Call
+from rate_limited.calls import Call, Result
 from rate_limited.exceptions import ValidationError
 from rate_limited.progress_bar import ProgressBar
 from rate_limited.queue import CompletionTrackingQueue
@@ -23,7 +23,7 @@ class Runner:
         resources: Collection[Resource],
         max_concurrent: int,
         max_retries: int = 5,
-        validation_function: Optional[Callable[[Any], bool]] = None,
+        validation_function: Optional[Callable[[Result], bool]] = None,
         progress_interval: float = 1.0,
         long_wait_warning_seconds: Optional[float] = 2.0,
     ):
@@ -177,7 +177,7 @@ class Runner:
                     self.requests_executor_pool, self.function, *call.args, **call.kwargs
                 )
                 # TODO: are there cases where we need to register result-based usage on error?
-                self.resource_manager.register_result(result)
+                self.resource_manager.register_result(call, result)
                 if self.validation_function is not None:
                     if not self.validation_function(result):
                         raise ValidationError(
