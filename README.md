@@ -10,6 +10,7 @@ those of Large Language Models (LLMs).
 ## Features
 - parallel execution - be as quick as possible within the rate limit you have
 - retry failed requests
+- validate the response against your criteria and retry if not valid (for non-deterministic APIs)
 - if interrupted (`KeyboardInterrupt`) e.g. in a notebook:
    - returns partial results
   - if ran again, continues from where it left off - and returns full results
@@ -66,6 +67,29 @@ for topic in topics:
     runner.schedule(model=model, messages=messages, max_tokens=256, request_timeout=60)
 
 results, exceptions = runner.run()
+```
+
+### Validating the response
+We can provide custom validation logic to the Runner - to retry the request if the response
+does not meet our criteria - for example, if it does not conform to the schema we expect. This
+assumes that the API is non-deterministic.
+
+Example above continued:
+```python
+def character_number_is_even(response):
+    poem = response["choices"][0]["message"]["content"]
+    return len([ch for ch in poem if ch.isalpha()]) % 2 == 0
+
+validating_runner = Runner(
+    openai.ChatCompletion.create,
+    resources,
+    max_concurrent=32,
+    validation_function=character_number_is_even,
+)
+for topic in topics:
+    messages = [{"role": "user", "content": f"Please write a short poem about {topic}, containing an even number of letters"}]
+    validating_runner.schedule(model=model, messages=messages, max_tokens=256, request_timeout=60)
+results, exceptions = validating_runner.run()
 ```
 
 ### Custom server with a "requests per minute" limit
@@ -139,8 +163,6 @@ flake8 && black --check . && mypy .
 - more ready-made API descriptions - incl. batched ones?
 - fix the "interrupt and resume" test in Python 3.11
 ### Nice to have:
-- add an optional "result verification" mechanism, for when the server might return, but 
-  the results might be incorrect (e.g. LM not conforming with the given format) - so we retry
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
 - text-based logging if tqdm is not installed
 - if/where possible, detect RateLimitExceeded - notify the user, slow down

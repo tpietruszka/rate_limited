@@ -5,9 +5,10 @@ from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from inspect import signature
 from logging import getLogger
-from typing import Callable, Collection, List, Optional, Tuple
+from typing import Any, Callable, Collection, List, Optional, Tuple
 
 from rate_limited.calls import Call
+from rate_limited.exceptions import ValidationError
 from rate_limited.progress_bar import ProgressBar
 from rate_limited.queue import CompletionTrackingQueue
 from rate_limited.resource_manager import ResourceManager
@@ -22,6 +23,7 @@ class Runner:
         resources: Collection[Resource],
         max_concurrent: int,
         max_retries: int = 5,
+        validation_function: Optional[Callable[[Any], bool]] = None,
         progress_interval: float = 1.0,
         long_wait_warning_seconds: Optional[float] = 2.0,
     ):
@@ -30,10 +32,9 @@ class Runner:
         self.max_concurrent = max_concurrent
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
+        self.validation_function = validation_function
         self.progress_interval = progress_interval
         self.long_wait_warning_seconds = long_wait_warning_seconds
-        # TODO: add verification functions?
-        # (checking if response meets criteria, retrying otherwise)
 
         self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
 
@@ -172,12 +173,20 @@ class Runner:
             self.resource_manager.pre_allocate(call)
             try:
                 # TODO: add a timeout mechanism?
-                call.result = await to_thread_in_pool(
+                result = await to_thread_in_pool(
                     self.requests_executor_pool, self.function, *call.args, **call.kwargs
                 )
                 # TODO: are there cases where we need to register result-based usage on error?
-                # (one case: if we have user-defined verification functions)
-                self.resource_manager.register_result(call.result)
+                self.resource_manager.register_result(result)
+                if self.validation_function is not None:
+                    if not self.validation_function(result):
+                        raise ValidationError(
+                            message="Validation failed",
+                            call=call,
+                            value=result,
+                        )
+                call.result = result
+
             except Exception as e:
                 will_retry = call.num_retries < self.max_retries
                 self.logger.warning(

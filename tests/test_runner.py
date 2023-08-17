@@ -1,9 +1,11 @@
 import asyncio
+import random
 from typing import List
 
 import pytest
 import requests
 
+from rate_limited.exceptions import ValidationError
 from rate_limited.resources import Resource
 from rate_limited.runner import Runner
 
@@ -226,3 +228,41 @@ def test_two_runs_to_completion(running_dummy_server, request, test_executor_nam
         assert exceptions == [[]] * num_requests
 
     test_executor(scenario)
+
+
+def test_result_validation(running_dummy_server):
+    """
+    Check that the results are validated using the validation function and retried if necessary.
+    """
+    rng = random.Random(42)
+
+    def random_client(url: str, how_many=2, failure_proba: float = 0.2) -> dict:
+        """Request between 1 and `how_many` calculations from the server, with a `failure_proba`"""
+        how_many = rng.randint(1, how_many)
+        result = requests.get(f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}")
+        # this imitates the behavior of an API client, raising e.g. on a timeout error (or some
+        # other kind of error)
+        result.raise_for_status()
+        parsed = result.json()
+        return parsed
+
+    def validate(result: dict) -> bool:
+        return result["output"].count("x") == 2
+
+    runner = Runner(
+        random_client,
+        resources=dummy_resources(num_requests=5),
+        validation_function=validate,
+        max_concurrent=5,
+        max_retries=10,
+    )
+    num_requests = 5
+    for _ in range(num_requests):
+        runner.schedule(running_dummy_server)
+
+    results, exceptions = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["xx"] * num_requests
+
+    exceptions_flat = [e for sublist in exceptions for e in sublist]
+    assert any(isinstance(e, ValidationError) for e in exceptions_flat)
