@@ -3,6 +3,8 @@ from functools import cached_property
 from inspect import signature
 from typing import Any, Callable, List
 
+Result = Any
+
 
 @dataclass
 class Call:
@@ -10,7 +12,7 @@ class Call:
     args: tuple
     kwargs: dict
     num_retries: int = 0
-    result: Any = None
+    result: Result = None
     exceptions: List[Exception] = field(default_factory=list)
 
     @cached_property

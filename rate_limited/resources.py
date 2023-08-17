@@ -1,9 +1,9 @@
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
-from rate_limited.calls import Call
+from rate_limited.calls import Call, Result
 
 Unit = float
 
@@ -21,7 +21,7 @@ class Resource:
         quota: Unit,
         time_window_seconds: float,
         arguments_usage_extractor: Optional[Callable[[Call], Unit]] = None,
-        results_usage_extractor: Optional[Callable[[Any], Unit]] = None,
+        results_usage_extractor: Optional[Callable[[Result], Unit]] = None,
         max_results_usage_estimator: Optional[Callable[[Call], Unit]] = None,
     ):
         """
