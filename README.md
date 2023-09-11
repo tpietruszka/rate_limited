@@ -46,6 +46,7 @@ The following arguments are required:
 - `function` - the function to be called
 - `resources` - a list of `Resource` objects, describing the rate limits you have (see examples below)
 - `max_concurrent` - the maximum number of requests to be executed in parallel
+
 Important optional arguments:
 - `max_retries` - the maximum number of retries for a single request (default: 5)
 - `validation_function` - a function that validates the response and returns `True` if it is valid
@@ -72,7 +73,7 @@ runner = Runner(openai.ChatCompletion.create, resources, max_concurrent=32)
 topics = ["honey badgers", "llamas", "pandas"]
 for topic in topics:
     messages = [{"role": "user", "content": f"Please write a poem about {topic}"}]
-    # call runner.schedule exactly like you would call openai.CharCompletion.create
+    # call runner.schedule exactly like you would call openai.ChatCompletion.create
     runner.schedule(model=model, messages=messages, max_tokens=256, request_timeout=60)
 
 results, exceptions = runner.run()
@@ -208,7 +209,10 @@ flake8 && black --check . && mypy .
 ```
 
 ## TODOs:
+- make it easier to import things; perhaps dedicated runner classes? (OpenAIChatRunner etc)
+- default for max_concurrent
 - more ready-made API descriptions - incl. batched ones?
+- examples of using each pre-made API description
 - fix the "interrupt and resume" test in Python 3.11
 ### Nice to have:
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
@@ -217,8 +221,10 @@ flake8 && black --check . && mypy .
 - support "streaming" and/or continuous operation:
   - enable scheduling calls while running and/or getting inputs from generators
   - support "streaming" results - perhaps similar to "as_completed" in asyncio?
+- support async calls (for people who prefer openai's acreate etc)
 - add timeouts option? (for now, the user is responsible for handling timeouts)
 - OpenAI shares information about rate limits in http response headers - could it be used without
   coupling too tightly with their API?
-- tests (and explicit support?) for different ways of registering usage
+- tests (and explicit support?) for different ways of registering usage (time of request
+  vs time of completion vs gradual)
 - more robust wrapper-like behavior of schedule() - more complete support of VS Code
