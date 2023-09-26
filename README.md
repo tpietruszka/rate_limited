@@ -22,7 +22,7 @@ those of Large Language Models (LLMs).
 - the client:
   - handles timeouts (requests will not hang forever)
   - raises an exception if the request fails (or the server returns an error / an "invalid" response)
-- requests are independent from each other, do not rely on order, can be retried if failed
+- requests are independent from each other, can be retried if failed
 - we want a standard, simple interface for the user - working the same way in a script and in a
   notebook (+ most data scientists do not want to deal with asyncio). Therefore, `Runner.run()` is
   a blocking call, with the same behavior regardless of the context.
@@ -40,6 +40,7 @@ In short:
 - call `Runner.schedule()` to schedule a request - with the same arguments as you would call the
   original function
 - call `Runner.run()` to run the scheduled requests, get the results and any exceptions raised
+  (**results are returned in the order of scheduling**)
 
 ### Creating a Runner
 The following arguments are required:
@@ -59,7 +60,6 @@ from rate_limited.runner import Runner
 from rate_limited.apis.openai import chat
 
 openai.api_key = "YOUR_API_KEY"
-endpoint = "https://api.openai.com/v1/chat/completions"
 model = "gpt-3.5-turbo"
 
 # describe your rate limits - values based on https://platform.openai.com/account/rate-limits
@@ -167,7 +167,7 @@ See `apis.openai.chat` for an example of a more complex API description, with mu
 
 ## Implementation details
 
-### Concurency model
+### Concurrency model
 
 The package uses a single thread with an asyncio event loop to kick off requests and keep track of
 the resources used.
@@ -209,13 +209,15 @@ flake8 && black --check . && mypy .
 ```
 
 ## TODOs:
-- make it easier to import things; perhaps dedicated runner classes? (OpenAIChatRunner etc)
+- support async clients
 - default for max_concurrent
+- make it easier to import things; perhaps dedicated runner classes? (OpenAIChatRunner etc)
 - more ready-made API descriptions - incl. batched ones?
 - examples of using each pre-made API description
 - fix the "interrupt and resume" test in Python 3.11
 ### Nice to have:
 - (optional) slow start feature - pace the initial requests, instead of sending them all at once
+- better utilization of APIs with a "gradual" quota growth, like OpenAI
 - text-based logging if tqdm is not installed
 - if/where possible, detect RateLimitExceeded - notify the user, slow down
 - support "streaming" and/or continuous operation:
