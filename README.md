@@ -46,10 +46,10 @@ In short:
 The following arguments are required:
 - `function` - the function to be called
 - `resources` - a list of `Resource` objects, describing the rate limits you have (see examples below)
-- `max_concurrent` - the maximum number of requests to be executed in parallel
 
 Important optional arguments:
 - `max_retries` - the maximum number of retries for a single request (default: 5)
+- `max_concurrent` - the maximum number of requests to be executed in parallel (default: 64)
 - `validation_function` - a function that validates the response and returns `True` if it is valid
   (e.g. conforms to the schema you expect). If not valid, the request will be retried.
 
@@ -68,7 +68,7 @@ resources = chat.openai_chat_resources(
     tokens_per_minute=90_000,
     model_max_len=4096,  # property of the model version in use - max sequence length
 )
-runner = Runner(openai.ChatCompletion.create, resources, max_concurrent=32)
+runner = Runner(openai.ChatCompletion.create, resources)
 
 topics = ["honey badgers", "llamas", "pandas"]
 for topic in topics:
@@ -151,19 +151,14 @@ Note: it is assumed that resource usage "expires" fully after the time window el
 but this approach seems sufficient to get "close enough" to the actual rate limits, without running
 into them.
 
-See [apis.openai.chat](./rate_limited/apis/openai/chat.py) for an example of a more complex API
-description with multiple resources.
-
-
-
-
 ### Limiting the number of concurrent requests
 
 The `max_concurrent` argument of `Runner` controls the number of concurrent requests.
 
 ### More advanced usage
-See `apis.openai.chat` for an example of a more complex API description, with multiple resources 
 
+See [apis.openai.chat](./rate_limited/apis/openai/chat.py) for an example of a more complex API
+description with multiple resources.
 
 ## Implementation details
 
@@ -210,7 +205,6 @@ flake8 && black --check . && mypy .
 
 ## TODOs:
 - support async clients
-- default for max_concurrent
 - make it easier to import things; perhaps dedicated runner classes? (OpenAIChatRunner etc)
 - more ready-made API descriptions - incl. batched ones?
 - examples of using each pre-made API description

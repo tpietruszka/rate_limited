@@ -21,7 +21,7 @@ class Runner:
         self,
         function: Callable,
         resources: Collection[Resource],
-        max_concurrent: int,
+        max_concurrent: int = 64,
         max_retries: int = 5,
         validation_function: Optional[Callable[[Result], bool]] = None,
         progress_interval: float = 1.0,
