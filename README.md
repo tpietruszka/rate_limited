@@ -4,7 +4,7 @@
 [![Lint and test](https://github.com/tpietruszka/rate_limited/actions/workflows/lint-and-test.yml/badge.svg?branch=main)](https://github.com/tpietruszka/rate_limited/actions/workflows/lint-and-test.yml?query=branch:main)
 [![Publish to PyPI](https://github.com/tpietruszka/rate_limited/actions/workflows/pypi-publish.yml/badge.svg)](https://github.com/tpietruszka/rate_limited/actions/workflows/pypi-publish.yml)
 
-A lightweight package meant to enable **efficient use of slow, rate-limited APIs** - like
+A lightweight package meant to enable **efficient parallel use of slow, rate-limited APIs** - like
 those of Large Language Models (LLMs).
 
 ## Features
@@ -169,6 +169,7 @@ the resources used.
 
 However, threads are also in use:
 - each call is actually executed in a thread pool, to avoid blocking the Runner
+  (if the client passed to the Runner is synchronous/blocking)
 - Runner.run(), spawns a new thread and a new event loop to run the main Runner logic in
  (`run_coro()`). This serves two objectives:
   - having the same sync entrypoint for both sync and async contexts (e.g. run the same code

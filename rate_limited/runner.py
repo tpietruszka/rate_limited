@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-from asyncio import create_task, gather
+from asyncio import create_task, gather, iscoroutinefunction
 from asyncio import sleep as asyncio_sleep
 from concurrent.futures import ThreadPoolExecutor
 from inspect import signature
@@ -28,6 +28,9 @@ class Runner:
         long_wait_warning_seconds: Optional[float] = 2.0,
     ):
         self.function = function
+        # determine if the passed function should be awaited or just called
+        self.is_async_api = iscoroutinefunction(function)
+
         self.resource_manager = ResourceManager(resources)
         self.max_concurrent = max_concurrent
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
@@ -173,9 +176,12 @@ class Runner:
             self.resource_manager.pre_allocate(call)
             try:
                 # TODO: add a timeout mechanism?
-                result = await to_thread_in_pool(
-                    self.requests_executor_pool, self.function, *call.args, **call.kwargs
-                )
+                if self.is_async_api:
+                    result = await self.function(*call.args, **call.kwargs)
+                else:
+                    result = await to_thread_in_pool(
+                        self.requests_executor_pool, self.function, *call.args, **call.kwargs
+                    )
                 # TODO: are there cases where we need to register result-based usage on error?
                 self.resource_manager.register_result(call, result)
                 if self.validation_function is not None:
