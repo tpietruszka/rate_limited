@@ -109,11 +109,11 @@ async def test_async_runner_simple_from_coroutine(running_dummy_server):
     assert exceptions == [[]] * 3
 
 
-def test_runner_increasing_payloads(running_dummy_server):
+def test_runner_increasing_payloads(running_dummy_server, test_client):
     """
     Tuned so that at first the requests resource is exhausted, then the points resource.
     """
-    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
+    runner = Runner(test_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
@@ -123,12 +123,12 @@ def test_runner_increasing_payloads(running_dummy_server):
     assert outputs == ["x" * i for i in range(1, 8)]
 
 
-def test_runner_unreliable_server(running_dummy_server):
+def test_runner_unreliable_server(running_dummy_server, test_client):
     """
     Testing results from an unreliable server - with a 50% chance of failure.
     """
     runner = Runner(
-        dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT, max_retries=10
+        test_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT, max_retries=10
     )
 
     for i in range(1, 8):
@@ -142,13 +142,13 @@ def test_runner_unreliable_server(running_dummy_server):
     assert exceptions != [[]] * 10
 
 
-def test_refuse_too_large_task(running_dummy_server):
-    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
+def test_refuse_too_large_task(running_dummy_server, test_client):
+    runner = Runner(test_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
     with pytest.raises(ValueError, match="exceeds resource quota "):
         runner.schedule(running_dummy_server, 1000)
 
 
-def test_runner_without_estimation(running_dummy_server):
+def test_runner_without_estimation(running_dummy_server, test_client):
     """
     Runner with estimation - temporarily exceeds the points quota.
 
@@ -162,7 +162,7 @@ def test_runner_without_estimation(running_dummy_server):
     # setting the number of points to be equal to the number of requests,
     # so points quota actually only lets through half of the requests at a time
     runner = Runner(
-        dummy_client,
+        test_client,
         dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=False),
         max_concurrent=DEFAULT_MAX_CONCURRENT,
     )
@@ -183,7 +183,7 @@ def test_runner_without_estimation(running_dummy_server):
     assert max(points_used) == num_requests * 2
 
 
-def test_runner_with_estimation(running_dummy_server):
+def test_runner_with_estimation(running_dummy_server, test_client):
     """
     Runner with estimation - does not exceed the points quota.
 
@@ -194,7 +194,7 @@ def test_runner_with_estimation(running_dummy_server):
     # setting the number of points to be equal to the number of requests,
     # so points quota actually only lets through half of the requests at a time
     runner = Runner(
-        dummy_client,
+        test_client,
         dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=True),
         max_concurrent=DEFAULT_MAX_CONCURRENT,
     )
@@ -217,7 +217,7 @@ def test_runner_with_estimation(running_dummy_server):
 
 @pytest.mark.parametrize("test_executor_name", ["test_executor_simple", "test_executor_asyncio"])
 @pytest.mark.timeout(15, method="thread")  # a likely failure mode here is a deadlock
-def test_two_runs_to_completion(running_dummy_server, request, test_executor_name):
+def test_two_runs_to_completion(running_dummy_server, request, test_executor_name, test_client):
     """
     After a run(), we support schedule()-ing more tasks and running them.
 
@@ -228,7 +228,7 @@ def test_two_runs_to_completion(running_dummy_server, request, test_executor_nam
     def scenario():
         num_requests = 4
         runner = Runner(
-            dummy_client,
+            test_client,
             dummy_resources(num_requests=2, num_points=100, time_window_seconds=2),
             max_concurrent=DEFAULT_MAX_CONCURRENT,
         )
@@ -258,6 +258,7 @@ def test_result_validation(running_dummy_server):
     """
     rng = random.Random(42)
 
+    # TODO: consider also testing a random async client
     def random_client(url: str, how_many=2, failure_proba: float = 0.2) -> dict:
         """Request between 1 and `how_many` calculations from the server, with a `failure_proba`"""
         how_many = rng.randint(1, how_many)

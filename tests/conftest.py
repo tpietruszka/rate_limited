@@ -3,7 +3,7 @@ import multiprocessing
 import socketserver
 from functools import partial
 from time import sleep
-from typing import List
+from typing import Callable, List
 
 import pytest
 import requests
@@ -89,13 +89,16 @@ def dummy_resources(
 
 async def dummy_client_async(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
     """Calls the dummy API - imitates an async API client"""
-    session = ClientSession()
-    async with session.get(
-        f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}"
-    ) as result:
-        result.raise_for_status()
-        parsed = await result.json()
-        return parsed
+    # TODO: consider (and test for?) potential cases where a session is created
+    # in the caller's code, within an existing event loop (!= Runner's event loop
+    # started in its own thread)
+    async with ClientSession() as session:
+        async with session.get(
+            f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}"
+        ) as result:
+            result.raise_for_status()
+            parsed = await result.json()
+            return parsed
 
 
 def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
@@ -106,3 +109,15 @@ def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
     result.raise_for_status()
     parsed = result.json()
     return parsed
+
+
+@pytest.fixture(params=("dummy_async", "dummy_sync"))
+def test_client(request) -> Callable:
+    """This gets instantiated twice - once for each client type - for each test that uses it"""
+    name = request.param
+    if name == "dummy_async":
+        return dummy_client_async
+    elif name == "dummy_sync":
+        return dummy_client
+    else:
+        raise ValueError(f"Unknown client type: {name}")
