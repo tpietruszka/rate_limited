@@ -6,6 +6,8 @@ from time import sleep
 from typing import List
 
 import pytest
+import requests
+from aiohttp import ClientSession
 
 from rate_limited.resources import Resource
 
@@ -83,3 +85,24 @@ def dummy_resources(
             max_results_usage_estimator=estimator,
         ),
     ]
+
+
+async def dummy_client_async(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
+    """Calls the dummy API - imitates an async API client"""
+    session = ClientSession()
+    async with session.get(
+        f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}"
+    ) as result:
+        result.raise_for_status()
+        parsed = await result.json()
+        return parsed
+
+
+def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
+    """Calls the dummy API"""
+    result = requests.get(f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}")
+    # this imitates the behavior of an API client, raising e.g. on a timeout error (or some
+    # other kind of error)
+    result.raise_for_status()
+    parsed = result.json()
+    return parsed

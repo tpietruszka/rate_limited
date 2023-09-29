@@ -6,7 +6,9 @@ import time
 
 import pytest
 
-from tests.test_runner import dummy_resources, get_runner
+from rate_limited.runner import Runner
+
+from .conftest import dummy_client, dummy_resources
 
 
 def wait_and_interrupt(wait_time_seconds: float):
@@ -50,12 +52,13 @@ def test_interrupt_and_resume(running_dummy_server):
     wait_time = (request_time + time_window_seconds) / 2
 
     def scenario(running_dummy_server):
-        runner = get_runner(
+        runner = Runner(
+            dummy_client,
             dummy_resources(
                 num_requests=num_requests_per_window,
                 num_points=points_quota,
                 time_window_seconds=time_window_seconds,
-            )
+            ),
         )
 
         for _ in range(num_requests_total):

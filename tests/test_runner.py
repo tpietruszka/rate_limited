@@ -1,39 +1,23 @@
-import asyncio
 import random
-from typing import List
 
 import pytest
 import requests
 
 from rate_limited.exceptions import ValidationError
-from rate_limited.resources import Resource
 from rate_limited.runner import Runner
 
-from .conftest import dummy_resources
+from .conftest import dummy_client, dummy_client_async, dummy_resources
 
-
-def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
-    """Calls the dummy API"""
-    result = requests.get(f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}")
-    # this imitates the behavior of an API client, raising e.g. on a timeout error (or some
-    # other kind of error)
-    result.raise_for_status()
-    parsed = result.json()
-    return parsed
-
-
-def get_runner(resources: List[Resource], max_concurrent=10, max_retries=5) -> Runner:
-    """Runner instantiated to call the dummy API"""
-    return Runner(
-        dummy_client,
-        resources=resources,
-        max_concurrent=max_concurrent,
-        max_retries=max_retries,
-    )
+DEFAULT_MAX_CONCURRENT = 10
 
 
 def test_runner_simple(running_dummy_server):
-    runner = get_runner(dummy_resources())
+    """
+    Simplest case - run a few tasks that get executed immediately.
+
+    Largely illustrative purpose
+    """
+    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
     runner.schedule(running_dummy_server, 1)
     runner.schedule(running_dummy_server, 2)
     runner.schedule(running_dummy_server, 3)
@@ -52,34 +36,84 @@ def test_runner_simple(running_dummy_server):
     assert exceptions == [[]] * 3
 
 
-def test_runner_simple_from_coroutine(running_dummy_server):
-    async def coro():
-        # the content of coro() reflects how the the runner would be used in Jupyter,
-        # (where everything happens within a coroutine)
-        runner = get_runner(dummy_resources())
-        runner.schedule(running_dummy_server, 1)
-        runner.schedule(running_dummy_server, 2)
-        runner.schedule(running_dummy_server, 3)
+@pytest.mark.asyncio
+async def test_runner_simple_from_coroutine(running_dummy_server):
+    """
+    Reflects how the the runner would be used in Jupyter,
+    where everything happens in the context of an event loop.
+    """
+    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
+    runner.schedule(running_dummy_server, 1)
+    runner.schedule(running_dummy_server, 2)
+    runner.schedule(running_dummy_server, 3)
 
-        results, exceptions = runner.run()
-        outputs = [result["output"] for result in results]
-        assert outputs == ["x", "xx", "xxx"]
+    results, exceptions = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x", "xx", "xxx"]
 
-        points_used = [
-            result["used_points"] + result["state_before_check"]["points"] for result in results
-        ]
-        assert max(points_used) == 2 * (1 + 2 + 3)
+    points_used = [
+        result["used_points"] + result["state_before_check"]["points"] for result in results
+    ]
+    assert max(points_used) == 2 * (1 + 2 + 3)
 
-        assert exceptions == [[]] * 3
+    assert exceptions == [[]] * 3
 
-    asyncio.run(coro())
+
+def test_async_runner_simple(running_dummy_server):
+    """
+    Simplest use case where the API client is async (the callable passed to the Runner
+    is a coroutine function)
+    """
+    runner = Runner(
+        function=dummy_client_async,
+        resources=dummy_resources(),
+        max_concurrent=DEFAULT_MAX_CONCURRENT,
+    )
+    runner.schedule(running_dummy_server, 1)
+    runner.schedule(running_dummy_server, 2)
+    runner.schedule(running_dummy_server, 3)
+
+    results, exceptions = runner.run()
+
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x", "xx", "xxx"]
+
+    points_used = [
+        result["used_points"] + result["state_before_check"]["points"] for result in results
+    ]
+    assert max(points_used) == 2 * (1 + 2 + 3)
+
+    assert exceptions == [[]] * 3
+
+
+@pytest.mark.asyncio
+async def test_async_runner_simple_from_coroutine(running_dummy_server):
+    runner = Runner(
+        function=dummy_client_async,
+        resources=dummy_resources(),
+        max_concurrent=DEFAULT_MAX_CONCURRENT,
+    )
+    runner.schedule(running_dummy_server, 1)
+    runner.schedule(running_dummy_server, 2)
+    runner.schedule(running_dummy_server, 3)
+
+    results, exceptions = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x", "xx", "xxx"]
+
+    points_used = [
+        result["used_points"] + result["state_before_check"]["points"] for result in results
+    ]
+    assert max(points_used) == 2 * (1 + 2 + 3)
+
+    assert exceptions == [[]] * 3
 
 
 def test_runner_increasing_payloads(running_dummy_server):
     """
     Tuned so that at first the requests resource is exhausted, then the points resource.
     """
-    runner = get_runner(dummy_resources())
+    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i)
 
@@ -93,7 +127,9 @@ def test_runner_unreliable_server(running_dummy_server):
     """
     Testing results from an unreliable server - with a 50% chance of failure.
     """
-    runner = get_runner(dummy_resources(), max_retries=10)
+    runner = Runner(
+        dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT, max_retries=10
+    )
 
     for i in range(1, 8):
         runner.schedule(running_dummy_server, i, failure_proba=0.5)
@@ -107,7 +143,7 @@ def test_runner_unreliable_server(running_dummy_server):
 
 
 def test_refuse_too_large_task(running_dummy_server):
-    runner = get_runner(dummy_resources())
+    runner = Runner(dummy_client, dummy_resources(), max_concurrent=DEFAULT_MAX_CONCURRENT)
     with pytest.raises(ValueError, match="exceeds resource quota "):
         runner.schedule(running_dummy_server, 1000)
 
@@ -125,8 +161,10 @@ def test_runner_without_estimation(running_dummy_server):
     num_requests = 10
     # setting the number of points to be equal to the number of requests,
     # so points quota actually only lets through half of the requests at a time
-    runner = get_runner(
-        dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=False)
+    runner = Runner(
+        dummy_client,
+        dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=False),
+        max_concurrent=DEFAULT_MAX_CONCURRENT,
     )
 
     for _ in range(num_requests):
@@ -155,8 +193,10 @@ def test_runner_with_estimation(running_dummy_server):
     num_requests = 10
     # setting the number of points to be equal to the number of requests,
     # so points quota actually only lets through half of the requests at a time
-    runner = get_runner(
-        dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=True)
+    runner = Runner(
+        dummy_client,
+        dummy_resources(num_requests=num_requests, num_points=num_requests, with_estimation=True),
+        max_concurrent=DEFAULT_MAX_CONCURRENT,
     )
 
     for _ in range(num_requests):
@@ -187,7 +227,11 @@ def test_two_runs_to_completion(running_dummy_server, request, test_executor_nam
 
     def scenario():
         num_requests = 4
-        runner = get_runner(dummy_resources(num_requests=2, num_points=100, time_window_seconds=2))
+        runner = Runner(
+            dummy_client,
+            dummy_resources(num_requests=2, num_points=100, time_window_seconds=2),
+            max_concurrent=DEFAULT_MAX_CONCURRENT,
+        )
 
         for _ in range(num_requests):
             runner.schedule(running_dummy_server, 1)
