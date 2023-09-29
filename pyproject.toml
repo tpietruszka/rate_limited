@@ -29,6 +29,7 @@ test = [
   "pytest",
   "pytest-xdist",
   "pytest-timeout",
+  "pytest-asyncio",
   "aiohttp",
   "requests",
 ]

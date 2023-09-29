@@ -2,13 +2,14 @@ import asyncio
 import random
 from typing import List
 
-import aiohttp
 import pytest
 import requests
 
 from rate_limited.exceptions import ValidationError
 from rate_limited.resources import Resource
 from rate_limited.runner import Runner
+
+from .conftest import dummy_resources
 
 
 def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
@@ -19,42 +20,6 @@ def dummy_client(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
     result.raise_for_status()
     parsed = result.json()
     return parsed
-
-
-async def dummy_client_async(url: str, how_many: int, failure_proba: float = 0.0) -> dict:
-    """Calls the dummy API - imitates an async API client"""
-    aio_client_session = aiohttp.ClientSession()
-
-    async with aio_client_session.get(
-        f"{url}/calculate_things/{how_many}?failure_proba={failure_proba}"
-    ) as result:
-        result.raise_for_status()
-        parsed = await result.json()
-        return parsed
-
-
-def dummy_resources(
-    num_requests: int = 3,
-    num_points: int = 20,
-    with_estimation: bool = True,
-    time_window_seconds=5,
-) -> List[Resource]:
-    estimator = (lambda call: 2 * call.get_argument("how_many")) if with_estimation else None
-    return [
-        Resource(
-            "requests",
-            num_requests,
-            time_window_seconds=time_window_seconds,
-            arguments_usage_extractor=lambda _: 1,
-        ),
-        Resource(
-            name="points",
-            quota=num_points,
-            time_window_seconds=time_window_seconds,
-            results_usage_extractor=lambda _, result: result["used_points"],
-            max_results_usage_estimator=estimator,
-        ),
-    ]
 
 
 def get_runner(resources: List[Resource], max_concurrent=10, max_retries=5) -> Runner:
@@ -108,31 +73,6 @@ def test_runner_simple_from_coroutine(running_dummy_server):
         assert exceptions == [[]] * 3
 
     asyncio.run(coro())
-
-
-def test_runner_async_api(running_dummy_server):
-    runner = Runner(
-        dummy_client_async,
-        resources=dummy_resources(),
-        max_concurrent=10,
-        max_retries=5,
-    )
-    runner.schedule(running_dummy_server, 1)
-    runner.schedule(running_dummy_server, 2)
-    runner.schedule(running_dummy_server, 3)
-
-    results, exceptions = runner.run()
-
-    outputs = [result["output"] for result in results]
-    assert outputs == ["x", "xx", "xxx"]
-
-    # assumption here: resource use here is <= than the quota (all get executed immediately)
-    points_used = [
-        result["used_points"] + result["state_before_check"]["points"] for result in results
-    ]
-    assert max(points_used) == 2 * (1 + 2 + 3)
-
-    assert exceptions == [[]] * 3
 
 
 def test_runner_increasing_payloads(running_dummy_server):

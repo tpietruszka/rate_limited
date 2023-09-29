@@ -205,7 +205,7 @@ flake8 && black --check . && mypy .
 ```
 
 ## TODOs:
-- support async clients
+- support (+ test) partial.bind clients
 - make it easier to import things; perhaps dedicated runner classes? (OpenAIChatRunner etc)
 - more ready-made API descriptions - incl. batched ones?
 - examples of using each pre-made API description

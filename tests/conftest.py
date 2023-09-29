@@ -3,8 +3,11 @@ import multiprocessing
 import socketserver
 from functools import partial
 from time import sleep
+from typing import List
 
 import pytest
+
+from rate_limited.resources import Resource
 
 from .dummy_server import start_app
 
@@ -56,3 +59,27 @@ def test_executor_asyncio():
         return asyncio.run(scenario_coro(test_scenario))
 
     return executor
+
+
+def dummy_resources(
+    num_requests: int = 3,
+    num_points: int = 20,
+    with_estimation: bool = True,
+    time_window_seconds=5,
+) -> List[Resource]:
+    estimator = (lambda call: 2 * call.get_argument("how_many")) if with_estimation else None
+    return [
+        Resource(
+            "requests",
+            num_requests,
+            time_window_seconds=time_window_seconds,
+            arguments_usage_extractor=lambda _: 1,
+        ),
+        Resource(
+            name="points",
+            quota=num_points,
+            time_window_seconds=time_window_seconds,
+            results_usage_extractor=lambda _, result: result["used_points"],
+            max_results_usage_estimator=estimator,
+        ),
+    ]
