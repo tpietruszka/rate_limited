@@ -39,7 +39,9 @@ class Runner:
         self.progress_interval = progress_interval
         self.long_wait_warning_seconds = long_wait_warning_seconds
 
-        self.logger = getLogger(f"rate_limited.Runner.{function.__name__}")
+        func_name = getattr(function, "__name__", f"UNNAMED_CALLABLE-{id(function)}")
+
+        self.logger = getLogger(f"rate_limited.Runner.{func_name}")
 
         # list of all calls that have been scheduled, in order of scheduling
         self.scheduled_calls: List[Call] = []
@@ -213,8 +215,8 @@ class Runner:
         """
         # TODO: consider more robust wrapper behavior, support VS Code better - maybe using `wrapt`
 
-        qualname = getattr(function, "__qualname__")
-        name = getattr(function, "__name__")
+        qualname = getattr(function, "__qualname__", f"UNNAMED_CALLABLE-{id(function)}")
+        name = getattr(function, "__name__", f"UNNAMED_CALLABLE-{id(function)}")
         module = getattr(function, "__module__")
         orig_docstring = getattr(function, "__doc__") or "[Docstring not found]"
         signature_rendered = str(signature(function))

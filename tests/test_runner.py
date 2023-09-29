@@ -1,4 +1,5 @@
 import random
+from functools import partial
 
 import pytest
 import requests
@@ -289,3 +290,54 @@ def test_result_validation(running_dummy_server):
 
     exceptions_flat = [e for sublist in exceptions for e in sublist]
     assert any(isinstance(e, ValidationError) for e in exceptions_flat)
+
+
+def test_with_partial_bound_kwarg(running_dummy_server, test_client):
+    NUM_REQUESTS = 3
+    client_bound_kwarg = partial(test_client, failure_proba=0.05)
+    runner = Runner(client_bound_kwarg, dummy_resources())
+    for _ in range(1, NUM_REQUESTS + 1):
+        runner.schedule(running_dummy_server, 1)
+    results, _ = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x"] * NUM_REQUESTS
+
+
+def test_with_partial_bound_positional_arg(running_dummy_server, test_client):
+    NUM_REQUESTS = 3
+    client_bound = partial(test_client, running_dummy_server)
+    runner = Runner(client_bound, dummy_resources())
+    for _ in range(1, NUM_REQUESTS + 1):
+        runner.schedule(1)
+    results, _ = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x"] * NUM_REQUESTS
+
+
+def test_with_partial_bound_mixed_args(running_dummy_server, test_client):
+    NUM_REQUESTS = 3
+    # binding first positional arg using kwargs syntax and one of the kwargs
+    client_bound = partial(test_client, url=running_dummy_server, failure_proba=0.05)
+    runner = Runner(client_bound, dummy_resources())
+    # note: how_many has to be passed as a kwarg, because a preceding positional arg is bound
+    # using kwargs syntax
+    for _ in range(1, NUM_REQUESTS + 1):
+        runner.schedule(how_many=1)
+    results, _ = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x"] * NUM_REQUESTS
+
+
+def test_with_lambda(running_dummy_server):
+    """
+    note: only supporting sync clients wrapped in lambdas
+    """
+    NUM_REQUESTS = 3
+    runner = Runner(
+        lambda how_many: dummy_client(running_dummy_server, how_many), dummy_resources()
+    )
+    for _ in range(1, NUM_REQUESTS + 1):
+        runner.schedule(1)
+    results, _ = runner.run()
+    outputs = [result["output"] for result in results]
+    assert outputs == ["x"] * NUM_REQUESTS
