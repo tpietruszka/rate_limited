@@ -217,7 +217,7 @@ class Runner:
 
         qualname = getattr(function, "__qualname__", f"UNNAMED_CALLABLE-{id(function)}")
         name = getattr(function, "__name__", f"UNNAMED_CALLABLE-{id(function)}")
-        module = getattr(function, "__module__")
+        module = getattr(function, "__module__", "[Module not found]")
         orig_docstring = getattr(function, "__doc__") or "[Docstring not found]"
         signature_rendered = str(signature(function))
 
