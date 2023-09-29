@@ -22,6 +22,7 @@ those of Large Language Models (LLMs).
 - the client:
   - handles timeouts (requests will not hang forever)
   - raises an exception if the request fails (or the server returns an error / an "invalid" response)
+  - can be any type of a callable - function, method, coroutine function, partial, etc
 - requests are independent from each other, can be retried if failed
 - we want a standard, simple interface for the user - working the same way in a script and in a
   notebook (+ most data scientists do not want to deal with asyncio). Therefore, `Runner.run()` is
@@ -44,7 +45,7 @@ In short:
 
 ### Creating a Runner
 The following arguments are required:
-- `function` - the function to be called
+- `function` - the callable of the API client
 - `resources` - a list of `Resource` objects, describing the rate limits you have (see examples below)
 
 Important optional arguments:
@@ -93,7 +94,6 @@ def character_number_is_even(response):
 validating_runner = Runner(
     openai.ChatCompletion.create,
     resources,
-    max_concurrent=32,
     validation_function=character_number_is_even,
 )
 for topic in topics:
