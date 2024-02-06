@@ -83,7 +83,10 @@ results, exceptions = runner.run()
 ### Validating the response
 We can provide custom validation logic to the Runner - to retry the request if the response
 does not meet our criteria - for example, if it does not conform to the schema we expect. This
-assumes that the API is non-deterministic.
+assumes that the API is non-deterministic. The `validators` arguments accepts:
+- `None`: when no validators are needed
+- a single function: to be used for all requests
+- a list of functions: to be used for each request separately. In such a case, they'll be combined with and AND operator in the given order, i.e. if one of them returns `False`, the rest of calls will be skipped.
 
 Example above continued:
 ```python
@@ -94,7 +97,7 @@ def character_number_is_even(response):
 validating_runner = Runner(
     openai.ChatCompletion.create,
     resources,
-    validation_function=character_number_is_even,
+    validators=character_number_is_even,
 )
 for topic in topics:
     messages = [{"role": "user", "content": f"Please write a short poem about {topic}, containing an even number of letters"}]
