@@ -253,7 +253,8 @@ def test_two_runs_to_completion(running_dummy_server, request, test_executor_nam
     test_executor(scenario)
 
 
-def test_result_validation(running_dummy_server):
+@pytest.mark.parametrize("add_extra_validator", [False, True])
+def test_result_validation(running_dummy_server, add_extra_validator):
     """
     Check that the results are validated using the validation function and retried if necessary.
     """
@@ -270,13 +271,20 @@ def test_result_validation(running_dummy_server):
         parsed = result.json()
         return parsed
 
-    def validate(result: dict) -> bool:
+    def validate_num_x_2(result: dict) -> bool:
         return result["output"].count("x") == 2
+    
+    def validate_starts_with_x(result: dict) -> bool:
+        return result["output"].startswith("x")
+    
+    validation = validate_num_x_2
+    if add_extra_validator:
+        validation = [validate_num_x_2, validate_starts_with_x]
 
     runner = Runner(
         random_client,
         resources=dummy_resources(num_requests=5),
-        validation_function=validate,
+        validation=validation,
         max_concurrent=5,
         max_retries=10,
     )
@@ -288,7 +296,11 @@ def test_result_validation(running_dummy_server):
     outputs = [result["output"] for result in results]
     assert outputs == ["xx"] * num_requests
 
-    exceptions_flat = [e for sublist in exceptions for e in sublist]
+    exceptions_flat = [
+        e
+        for sublist in exceptions
+        for e in sublist
+    ]
     assert any(isinstance(e, ValidationError) for e in exceptions_flat)
 
 

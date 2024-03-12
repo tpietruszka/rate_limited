@@ -51,8 +51,9 @@ The following arguments are required:
 Important optional arguments:
 - `max_retries` - the maximum number of retries for a single request (default: 5)
 - `max_concurrent` - the maximum number of requests to be executed in parallel (default: 64)
-- `validation_function` - a function that validates the response and returns `True` if it is valid
-  (e.g. conforms to the schema you expect). If not valid, the request will be retried.
+- `validation` - typically a function that validates the response and returns `True` if it is valid
+  (e.g. conforms to the schema you expect). If not valid, the request will be retried. See more 
+  possible values for this in the ["Validating the response"](#[Validating-the-response]) section below.
 
 ### OpenAI example
 ```python
@@ -83,7 +84,10 @@ results, exceptions = runner.run()
 ### Validating the response
 We can provide custom validation logic to the Runner - to retry the request if the response
 does not meet our criteria - for example, if it does not conform to the schema we expect. This
-assumes that the API is non-deterministic.
+assumes that the API is non-deterministic. The `validation` argument accepts:
+- `None`: when no validators are needed
+- a single function: to be used for all requests
+- a list of functions: to be used for each request separately. In such a case, they'll be combined with an AND operator in the given order, i.e. if one of them returns `False`, the rest of calls will be skipped.
 
 Example above continued:
 ```python
@@ -94,7 +98,7 @@ def character_number_is_even(response):
 validating_runner = Runner(
     openai.ChatCompletion.create,
     resources,
-    validation_function=character_number_is_even,
+    validation=character_number_is_even,
 )
 for topic in topics:
     messages = [{"role": "user", "content": f"Please write a short poem about {topic}, containing an even number of letters"}]
