@@ -16,7 +16,7 @@ from rate_limited.resources import Resource
 from rate_limited.threading_utils import to_thread_in_pool
 
 validation_function_type = Callable[[Result], bool]
-validators_type = Optional[Union[validation_function_type, List[validation_function_type]]]
+validation_param_type = Optional[Union[validation_function_type, List[validation_function_type]]]
 
 
 class Runner:
@@ -26,7 +26,7 @@ class Runner:
         resources: Collection[Resource],
         max_concurrent: int = 64,
         max_retries: int = 5,
-        validators: validators_type = None,
+        validation: validation_param_type = None,
         progress_interval: float = 1.0,
         long_wait_warning_seconds: Optional[float] = 2.0,
     ):
@@ -38,7 +38,7 @@ class Runner:
         self.max_concurrent = max_concurrent
         self.requests_executor_pool = ThreadPoolExecutor(max_workers=max_concurrent)
         self.max_retries = max_retries
-        self.validation_function = self.get_validation_function(validators)
+        self.validation = self.digest_validation_parameter(validation)
         self.progress_interval = progress_interval
         self.long_wait_warning_seconds = long_wait_warning_seconds
 
@@ -55,21 +55,21 @@ class Runner:
 
         self._update_schedule_as_wrapper(function)
 
-    def get_validation_function(
-        self, validators: validators_type
+    def digest_validation_parameter(
+        self, validation: validation_param_type
     ) -> Optional[validation_function_type]:
         """
-        Composes the validation function from the passed validators argument
-        If None, or callable, just passthrough
-        If its a list of callables, combine them with AND
+        Digests the passed validation parameter
+        - If None, or callable, just passthrough
+        - If a list of callables, combine them with AND
         """
-        if validators is None:
+        if validation is None:
             return None
-        if callable(validators):
-            return self.validation_function
-        if isinstance(self.validation_function, list):
-            return lambda result: all(f(result) for f in self.validation_function)
-        raise ValueError("Validation function must be a callable or a list of callables")
+        if callable(validation):
+            return validation
+        if isinstance(validation, list):
+            return lambda result: all(f(result) for f in validation)
+        raise ValueError("Validation must be None, a callable or a list of callables")
 
     def schedule(self, *args, **kwargs) -> None:
         """
@@ -205,8 +205,8 @@ class Runner:
                     )
                 # TODO: are there cases where we need to register result-based usage on error?
                 self.resource_manager.register_result(call, result)
-                if self.validation_function is not None:
-                    if not self.validation_function(result):
+                if self.validation is not None:
+                    if not self.validation(result):
                         raise ValidationError(
                             message="Validation failed",
                             call=call,
