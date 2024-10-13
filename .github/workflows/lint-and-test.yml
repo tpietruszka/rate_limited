@@ -5,6 +5,7 @@ on:
     branches:
       - main
   workflow_dispatch:
+  pull_request:
 
 jobs:
   build:
@@ -29,7 +30,7 @@ jobs:
         flake8 . --max-line-length=127
     - name: Check formatting with Black
       run: |
-        black --check .
+        black --check --diff .
     - name: Static type checking
       run: |
         mypy .
