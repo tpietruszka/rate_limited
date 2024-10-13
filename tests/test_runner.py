@@ -273,11 +273,9 @@ def test_result_validation(running_dummy_server, add_extra_validator):
 
     def validate_num_x_2(result: dict) -> bool:
         return result["output"].count("x") == 2
-    
 
     def validate_starts_with_x(result: dict) -> bool:
         return result["output"].startswith("x")
-    
 
     validation = validate_num_x_2
     if add_extra_validator:
