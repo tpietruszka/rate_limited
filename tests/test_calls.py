@@ -1,4 +1,5 @@
 """Intended to test the calls module - not performing actual calls to any API"""
+
 from rate_limited.calls import Call
 
 
