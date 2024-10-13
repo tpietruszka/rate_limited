@@ -296,11 +296,7 @@ def test_result_validation(running_dummy_server, add_extra_validator):
     outputs = [result["output"] for result in results]
     assert outputs == ["xx"] * num_requests
 
-    exceptions_flat = [
-        e
-        for sublist in exceptions
-        for e in sublist
-    ]
+    exceptions_flat = [e for sublist in exceptions for e in sublist]
     assert any(isinstance(e, ValidationError) for e in exceptions_flat)
 
 
